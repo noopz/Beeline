@@ -13,6 +13,8 @@
 -- turning this option on turns that on (once - set it off yourself and it stays off until you turn this option on again).
 -- A waypoint of your own (you set a pin on the world map) is yours: the marker leaves it alone until you clear it.
 -- Only on a change of the arrow's target: nothing per frame.
+-- Routing through Shortest Path Forever (UI/ShortestPath.lua): the waypoint and the quest focus are its own, so this
+-- sets neither, and takes its pins for no one's.
 local _, ns = ...
 local pcall = ns.PCall or pcall -- (a job never pauses under it: Core.lua)
 local GameNav = {}
@@ -83,9 +85,21 @@ local function questOf(t)
 end
 local focused = nil -- the quest the route focused
 
+local function routed() return ns.ShortestPath and ns.ShortestPath.Routing() end
+-- the route's waypoint and quest focus taken away (the option off, or Shortest Path leading)
+local function release()
+  if mine and api() and isMine(current()) then pcall(C_Map.ClearUserWaypoint) end
+  if focused and C_SuperTrack and C_SuperTrack.GetSuperTrackedQuestID then
+    local ok, now = pcall(C_SuperTrack.GetSuperTrackedQuestID)
+    if ok and now == focused then pcall(C_SuperTrack.SetSuperTrackedQuestID, 0) end
+  end
+  mine, focused = nil, nil
+end
+
 -- put the marker on the arrow's target (nil: nothing to point at - the route's waypoint goes)
 function GameNav.Follow(t)
   if not GameNav.Enabled() or yours then return end
+  if routed() then release(); return end
   local q = questOf(t)
   if q then
     -- the game's own marker for the quest: the route's waypoint goes
@@ -120,16 +134,20 @@ function GameNav.Setup()
 end
 
 ns.On("FR_LOADED", function() GameNav.Setup() end)
-ns.On("FR_SETTINGS", function()
-  if GameNav.Enabled() then GameNav.Setup()
+ns.On("FR_SETTINGS", function(key)
+  if key == "shortestPathRouting" and not routed() then
+    -- routing turned off: Shortest Path ends its journey and puts back the waypoint it borrowed first; one up then
+    -- is the player's
+    C_Timer.After(0.5, function()
+      if routed() or not api() then return end
+      local p = current()
+      yours = p and not isMine(p) and true or false
+      GameNav.Setup()
+    end)
+  elseif GameNav.Enabled() then GameNav.Setup()
   else
     -- off: the route's waypoint goes; turning it on again turns the game's marker on again
-    if mine and api() and isMine(current()) then pcall(C_Map.ClearUserWaypoint) end
-    if focused and C_SuperTrack and C_SuperTrack.GetSuperTrackedQuestID then
-      local ok, now = pcall(C_SuperTrack.GetSuperTrackedQuestID)
-      if ok and now == focused then pcall(C_SuperTrack.SetSuperTrackedQuestID, 0) end
-    end
-    mine, focused = nil, nil
+    release()
     if ns.db then ns.db.gameNavCVar = nil end
   end
 end)
@@ -137,7 +155,7 @@ end)
 ns.On("QUEST_POI_UPDATE", function() if GameNav.Enabled() and ns.Arrow then GameNav.Follow(ns.Arrow.Current()) end end)
 -- a waypoint set or cleared: one that isn't the route's is the player's own, until it is gone
 ns.On("USER_WAYPOINT_UPDATED", function()
-  if not api() then return end
+  if not api() or routed() then return end
   local p = current()
   if p and not isMine(p) then yours = true; mine = nil
   elseif not p and yours then yours = false; GameNav.Follow(ns.Arrow and ns.Arrow.Current())

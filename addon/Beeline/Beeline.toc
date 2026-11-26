@@ -5,7 +5,7 @@
 ## Version: dev
 ## SavedVariables: BeelineDB
 ## SavedVariablesPerCharacter: BeelineChar
-## OptionalDeps: Questie, ForeverRoute
+## OptionalDeps: Questie, ForeverRoute, ShortestPathForever
 
 Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
@@ -72,6 +72,7 @@ UI\Card\Footer.lua
 UI\Card.lua
 UI\Arrow.lua
 UI\GameNav.lua
+UI\ShortestPath.lua
 UI\Pins.lua
 UI\Zones.lua
 UI\Window.lua

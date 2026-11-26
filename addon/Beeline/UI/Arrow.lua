@@ -290,8 +290,15 @@ end
 -- the right-click hide is kept for that step itself (a replan or path switch renumbers steps: by number it could
 -- hide some unrelated later step)
 local function stepAt(i) return i and BeelineData and BeelineData.steps and BeelineData.steps[i] end
-local function visible(i)
-  return ns.db.arrow and not (Arrow.hiddenFor and Arrow.hiddenFor == stepAt(i)) and not ns.Engine.view
+local function hiddenReason(i, corpse)
+  if not ns.db.arrow then return "turned off in settings" end
+  if not corpse then
+    if Arrow.hiddenFor and Arrow.hiddenFor == stepAt(i) then return "you right-clicked it" end
+    if ns.Engine.view then return "looking at another step (Back / list)" end
+  end
+  if ns.db.hideArrowWithShortestPath and ns.ShortestPath and ns.ShortestPath.Active() then
+    return "Shortest Path Forever is guiding"
+  end
 end
 -- why the arrow isn't showing, logged when that changes (BeelineDB.why: read from the save after play)
 local lastWhy
@@ -302,13 +309,18 @@ local function noteHidden(why)
   -- (hidden for no reason it knows: kept as a moment for a bug report - Moments.lua; on a change only, as this)
   if why and ns.Moments then pcall(ns.Moments.ArrowHidden, why) end
 end
-Arrow.Visible = function(i) return visible(i) and true or false end
+Arrow.Visible = function(i) return not hiddenReason(i) end
 Arrow.HiddenWhy = function() return lastWhy end
-local function hiddenReason(i, s)
-  if not s then return "no step" end
-  if not ns.db.arrow then return "turned off in settings" end
-  if Arrow.hiddenFor and Arrow.hiddenFor == s then return "you right-clicked it" end
-  if ns.Engine.view then return "looking at another step (Back / list)" end
+local function refreshVisibility()
+  if not (f and target) then return end
+  local why = hiddenReason(target.index, target.corpse)
+  if not why and not f:IsShown() then
+    -- The distance driver can register arrival while the arrow is hidden.
+    f.arrow:SetShown(not target.arrived)
+    f.check:SetShown(target.arrived == true)
+  end
+  f:SetShown(not why)
+  noteHidden(why)
 end
 
 -- up/down hints only mean something inside a building (floors, stairs); outdoors a height difference is a hill
@@ -352,7 +364,7 @@ local function corpseTarget(i)
   if ns.Nav then ns.Nav.Want({ key = target.key, wx = wx, wy = wy, inst = winst, m = c.m }) end
   f.label:SetText(target.label)
   f.arrow:Show(); f.check:Hide(); f.pulse:Stop(); f.ring:SetAlpha(0)
-  f:SetShown(ns.db.arrow and true or false)
+  refreshVisibility()
   return true
 end
 
@@ -400,7 +412,7 @@ function Arrow.SetTarget(i, force)
   -- (and the same first leg of its trip: one learned mid-ride, say, builds the target again)
   if target and s and target.index == i and target.step == s and not force
     and not (aimed and aimed.step == s and ns.Engine.TravelFor and aimed.key ~= tripKey(ns.Engine.TravelFor(s))) then
-    f:SetShown(visible(i)); noteHidden(not visible(i) and hiddenReason(i, s) or nil)
+    refreshVisibility()
     return
   end
   building = true
@@ -504,7 +516,7 @@ function Arrow.Build(i, s)
     if ns.Nav then ns.Nav.Want(target.key and { key = target.key, wx = wx, wy = wy, inst = winst, z = target.z, m = m } or nil) end
     f.label:SetText(target.label)
     f.arrow:Show(); f.check:Hide(); f.pulse:Stop(); f.ring:SetAlpha(0)
-    f:SetShown(visible(i)); noteHidden(not visible(i) and hiddenReason(i, s) or nil)
+    refreshVisibility()
     if ns.GameNav then ns.GameNav.Follow(target) end -- (the game's own marker on the same spot: UI/GameNav.lua)
   else
     target = nil; f:Hide(); ns.Fire("FR_DISTANCE", nil)
@@ -531,6 +543,7 @@ function Arrow.GameSpot(s)
 end
 
 ns.On("FR_LOADED", build)
+ns.On("FR_SHORTEST_PATH_GUIDANCE", refreshVisibility)
 -- the game's quest markers changed (it marks a quest once you are in its zone, or an objective moved on): a step with
 -- no spot of its own may have one now
 ns.On("QUEST_POI_UPDATE", function()
@@ -561,7 +574,8 @@ Arrow.RETARGET_KEYS = { arrow = true, gameNav = true, smartNext = true, trails =
 ns.On("FR_SETTINGS", function(key)
   if not f then return end
   Arrow.ApplyPos()
-  if key == nil or Arrow.RETARGET_KEYS[key] then Arrow.SetTarget(ns.Engine.Shown(), true) end
+  if key == nil or Arrow.RETARGET_KEYS[key] then Arrow.SetTarget(ns.Engine.Shown(), true)
+  elseif key == "hideArrowWithShortestPath" then refreshVisibility() end
 end)
 -- (again only when the retarget at 1 s left nothing to point at, e.g. no position yet after a loading screen: not a
 -- second trip search for a target already built)
