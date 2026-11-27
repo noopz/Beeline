@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.2.2 - 2026-11-27
+- Detailed map line: Feralas is back on it (37 zones). Its mesh had lost a steep hill path the plans walk (at 53, 52: the line went round for 2,000 yd where the walk is 940 yd); corners on steep hillsides that only a diagonal step crosses now join, in every zone outside the cities. Lines that swim to Feathermoon over the deep sea floor are no longer counted as going through walls: you swim at the surface. Every zone's mesh rebuilt; all 37 pass the audit on the 3.2.1 plans' walks (Feralas 60/60, Un'Goro 60/60).
+
 ## 3.2.1 - 2026-11-27
 - Plans: the Timbermaw quests in Azshara that need Timbermaw Hold at Neutral (Report to Rageroar, Master Feardred, Toil and Trouble, Encroaching Corruption and 15 more) are off every built-in plan: the main route, the "go there instead" zone routes and the side trips. A character passing through Azshara at no standing could not take them (3.2.0 already keeps them off the card; now the plans no longer count on their XP).
 - Horde plans rebuilt with 3.2.1's planner (no capital hops mid-zone, the walk to crossings priced like the addon's): about 0.9 hours less to 60 on average (91.6 h, from 92.5 h), every Horde plan 0.7 to 0.9 h less, simulated travel 34.8 h (35.0 h), no grinding. Alliance plans keep 3.1's route, reassembled the same way: the same hours to 60, simulated travel 30.6 h (30.8 h).
