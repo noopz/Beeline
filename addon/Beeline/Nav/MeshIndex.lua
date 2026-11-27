@@ -10,6 +10,7 @@
 --   1435 Swamp of Sorrows: audit: none 1, wall 1, long 2
 --   1441 Thousand Needles: audit: wall 1, none 3
 --   1443 Desolace: audit: wall 1, none 3
+--   1444 Feralas: audit: wall 8, long 1
 --   1448 Felwood: audit: none 4
 --   1450 Moonglade: audit: wall 2, none 2
 --   1454 Orgrimmar: audit: none 10, long 3
@@ -38,7 +39,6 @@ BeelineMeshIndex = {
   [1439] = "Beeline_MeshKalimdor", -- Darkshore: 2.5 MB unpacked (+0.4 MB packed, with its continent's), audit 60/60
   [1440] = "Beeline_MeshKalimdor", -- Ashenvale: 7.0 MB unpacked (+1.3 MB packed, with its continent's), audit 60/60
   [1442] = "Beeline_MeshKalimdor", -- Stonetalon Mountains: 2.7 MB unpacked (+0.5 MB packed, with its continent's), audit 59/60
-  [1444] = "Beeline_MeshKalimdor", -- Feralas: 5.6 MB unpacked (+1.0 MB packed, with its continent's), audit 57/60
   [1445] = "Beeline_MeshKalimdor", -- Dustwallow Marsh: 3.6 MB unpacked (+0.7 MB packed, with its continent's), audit 61/62
   [1446] = "Beeline_MeshKalimdor", -- Tanaris: 4.5 MB unpacked (+0.7 MB packed, with its continent's), audit 63/63
   [1447] = "Beeline_MeshKalimdor", -- Azshara: 4.4 MB unpacked (+0.8 MB packed, with its continent's), audit 60/60
