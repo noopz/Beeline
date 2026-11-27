@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: Beeline
+## IconTexture: Interface\AddOns\Beeline\Media\logo
 ## Notes: Your own leveling route, on rails: step card, waypoint arrow, map pins, live quest tracking.
 ## Author: noopz
 ## Version: dev

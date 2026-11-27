@@ -2,54 +2,54 @@
 -- load-on-demand addon its mesh is in. A zone is here only when its mesh passes the audit (tools/navmesh-audit.js: the
 -- plans' walks and the named cases, nav-audit's rules) and unpacks to at most 10 MB. Regenerate, don't edit.
 -- Not here (the planned path, or a city's grid, as with the option off):
---   1418 Badlands: audit: none 3, wall 1
---   1426 Dun Morogh: audit: none 2, wall 2
---   1427 Searing Gorge: audit: wall 3, long 4
+--   1418 Badlands: audit: none 4
 --   1430 Deadwind Pass: audit: too few walks
---   1434 Stranglethorn Vale: audit: wall 5
---   1435 Swamp of Sorrows: audit: none 1, wall 1, long 2
---   1441 Thousand Needles: audit: wall 1, none 3
---   1443 Desolace: audit: wall 1, none 3
---   1448 Felwood: audit: none 4
---   1450 Moonglade: audit: wall 2, none 2
---   1454 Orgrimmar: audit: none 10, long 3
+--   1441 Thousand Needles: audit: none 4
+--   1450 Moonglade: audit: none 2
+--   1454 Orgrimmar: audit: none 5, long 4
 --   1457 Darnassus: audit: too few walks
 BeelineMeshIndex = {
-  [1411] = "Beeline_MeshKalimdor", -- Durotar: 3.1 MB unpacked (+0.5 MB packed, with its continent's), audit 61/61
-  [1412] = "Beeline_MeshKalimdor", -- Mulgore: 2.3 MB unpacked (+0.4 MB packed, with its continent's), audit 59/60
-  [1413] = "Beeline_MeshKalimdor", -- The Barrens: 7.0 MB unpacked (+1.3 MB packed, with its continent's), audit 61/62
-  [1416] = "Beeline_MeshEK", -- Alterac Mountains: 2.3 MB unpacked (+0.4 MB packed, with its continent's), audit 12/12
-  [1417] = "Beeline_MeshEK", -- Arathi Highlands: 2.2 MB unpacked (+0.4 MB packed, with its continent's), audit 56/56
-  [1419] = "Beeline_MeshEK", -- Blasted Lands: 1.7 MB unpacked (+0.3 MB packed, with its continent's), audit 18/18
-  [1420] = "Beeline_MeshEK", -- Tirisfal Glades: 3.6 MB unpacked (+0.6 MB packed, with its continent's), audit 57/60
-  [1421] = "Beeline_MeshEK", -- Silverpine Forest: 2.9 MB unpacked (+0.5 MB packed, with its continent's), audit 60/60
-  [1422] = "Beeline_MeshEK", -- Western Plaguelands: 3.1 MB unpacked (+0.5 MB packed, with its continent's), audit 60/60
-  [1423] = "Beeline_MeshEK", -- Eastern Plaguelands: 5.5 MB unpacked (+0.9 MB packed, with its continent's), audit 61/61
-  [1424] = "Beeline_MeshEK", -- Hillsbrad Foothills: 2.1 MB unpacked (+0.3 MB packed, with its continent's), audit 61/61
-  [1425] = "Beeline_MeshEK", -- The Hinterlands: 3.4 MB unpacked (+0.6 MB packed, with its continent's), audit 59/60
-  [1428] = "Beeline_MeshEK", -- Burning Steppes: 2.2 MB unpacked (+0.4 MB packed, with its continent's), audit 60/60
-  [1429] = "Beeline_MeshEK", -- Elwynn Forest: 2.5 MB unpacked (+0.5 MB packed, with its continent's), audit 60/60
-  [1431] = "Beeline_MeshEK", -- Duskwood: 2.7 MB unpacked (+0.5 MB packed, with its continent's), audit 60/60
-  [1432] = "Beeline_MeshEK", -- Loch Modan: 1.8 MB unpacked (+0.3 MB packed, with its continent's), audit 28/29
-  [1433] = "Beeline_MeshEK", -- Redridge Mountains: 1.7 MB unpacked (+0.3 MB packed, with its continent's), audit 60/60
-  [1436] = "Beeline_MeshEK", -- Westfall: 1.2 MB unpacked (+0.2 MB packed, with its continent's), audit 60/60
-  [1437] = "Beeline_MeshEK", -- Wetlands: 3.2 MB unpacked (+0.5 MB packed, with its continent's), audit 61/62
-  [1438] = "Beeline_MeshKalimdor", -- Teldrassil: 3.0 MB unpacked (+0.5 MB packed, with its continent's), audit 59/60
-  [1439] = "Beeline_MeshKalimdor", -- Darkshore: 2.7 MB unpacked (+0.4 MB packed, with its continent's), audit 60/60
-  [1440] = "Beeline_MeshKalimdor", -- Ashenvale: 7.3 MB unpacked (+1.3 MB packed, with its continent's), audit 60/60
-  [1442] = "Beeline_MeshKalimdor", -- Stonetalon Mountains: 2.9 MB unpacked (+0.5 MB packed, with its continent's), audit 60/60
-  [1444] = "Beeline_MeshKalimdor", -- Feralas: 6.0 MB unpacked (+1.0 MB packed, with its continent's), audit 60/60
-  [1445] = "Beeline_MeshKalimdor", -- Dustwallow Marsh: 3.8 MB unpacked (+0.7 MB packed, with its continent's), audit 61/62
-  [1446] = "Beeline_MeshKalimdor", -- Tanaris: 4.6 MB unpacked (+0.7 MB packed, with its continent's), audit 63/63
-  [1447] = "Beeline_MeshKalimdor", -- Azshara: 4.6 MB unpacked (+0.8 MB packed, with its continent's), audit 60/60
-  [1449] = "Beeline_MeshKalimdor", -- Un'Goro Crater: 2.1 MB unpacked (+0.4 MB packed, with its continent's), audit 60/60
-  [1451] = "Beeline_MeshKalimdor", -- Silithus: 2.9 MB unpacked (+0.5 MB packed, with its continent's), audit 52/52
-  [1452] = "Beeline_MeshKalimdor", -- Winterspring: 3.3 MB unpacked (+0.6 MB packed, with its continent's), audit 60/60
-  [1453] = "Beeline_MeshEK", -- Stormwind City: 2.5 MB unpacked (+0.2 MB packed, with its continent's), audit 62/62
+  [1411] = "Beeline_MeshKalimdor", -- Durotar: 3.1 MB unpacked (+0.5 MB packed, with its continent's; 408 falls, +0.17 MB as a ghost), audit 61/61
+  [1412] = "Beeline_MeshKalimdor", -- Mulgore: 2.3 MB unpacked (+0.4 MB packed, with its continent's; 597 falls, +0.26 MB as a ghost), audit 59/60
+  [1413] = "Beeline_MeshKalimdor", -- The Barrens: 7.0 MB unpacked (+1.3 MB packed, with its continent's; 2285 falls, +0.99 MB as a ghost), audit 61/62
+  [1416] = "Beeline_MeshEK", -- Alterac Mountains: 2.3 MB unpacked (+0.4 MB packed, with its continent's; 525 falls, +0.23 MB as a ghost), audit 12/12
+  [1417] = "Beeline_MeshEK", -- Arathi Highlands: 2.2 MB unpacked (+0.4 MB packed, with its continent's; 484 falls, +0.20 MB as a ghost), audit 56/56
+  [1419] = "Beeline_MeshEK", -- Blasted Lands: 1.7 MB unpacked (+0.3 MB packed, with its continent's; 522 falls, +0.21 MB as a ghost), audit 18/18
+  [1420] = "Beeline_MeshEK", -- Tirisfal Glades: 3.6 MB unpacked (+0.6 MB packed, with its continent's; 665 falls, +0.28 MB as a ghost), audit 57/60
+  [1421] = "Beeline_MeshEK", -- Silverpine Forest: 2.9 MB unpacked (+0.5 MB packed, with its continent's; 471 falls, +0.19 MB as a ghost), audit 60/60
+  [1422] = "Beeline_MeshEK", -- Western Plaguelands: 3.1 MB unpacked (+0.5 MB packed, with its continent's; 520 falls, +0.23 MB as a ghost), audit 60/60
+  [1423] = "Beeline_MeshEK", -- Eastern Plaguelands: 5.5 MB unpacked (+0.9 MB packed, with its continent's; 995 falls, +0.40 MB as a ghost), audit 61/61
+  [1424] = "Beeline_MeshEK", -- Hillsbrad Foothills: 2.1 MB unpacked (+0.4 MB packed, with its continent's; 357 falls, +0.15 MB as a ghost), audit 61/61
+  [1425] = "Beeline_MeshEK", -- The Hinterlands: 3.4 MB unpacked (+0.6 MB packed, with its continent's; 851 falls, +0.35 MB as a ghost), audit 59/60
+  [1426] = "Beeline_MeshEK", -- Dun Morogh: 3.7 MB unpacked (+0.7 MB packed, with its continent's; 992 falls, +0.40 MB as a ghost), audit 58/60
+  [1427] = "Beeline_MeshEK", -- Searing Gorge: 1.6 MB unpacked (+0.3 MB packed, with its continent's; 528 falls, +0.21 MB as a ghost), audit 57/60
+  [1428] = "Beeline_MeshEK", -- Burning Steppes: 2.2 MB unpacked (+0.4 MB packed, with its continent's; 553 falls, +0.24 MB as a ghost), audit 60/60
+  [1429] = "Beeline_MeshEK", -- Elwynn Forest: 2.5 MB unpacked (+0.5 MB packed, with its continent's; 373 falls, +0.16 MB as a ghost), audit 60/60
+  [1431] = "Beeline_MeshEK", -- Duskwood: 2.7 MB unpacked (+0.5 MB packed, with its continent's; 680 falls, +0.29 MB as a ghost), audit 60/60
+  [1432] = "Beeline_MeshEK", -- Loch Modan: 1.8 MB unpacked (+0.3 MB packed, with its continent's; 461 falls, +0.19 MB as a ghost), audit 28/29
+  [1433] = "Beeline_MeshEK", -- Redridge Mountains: 1.7 MB unpacked (+0.3 MB packed, with its continent's; 464 falls, +0.19 MB as a ghost), audit 60/60
+  [1434] = "Beeline_MeshEK", -- Stranglethorn Vale: 6.0 MB unpacked (+1.0 MB packed, with its continent's; 1293 falls, +0.55 MB as a ghost), audit 61/61
+  [1435] = "Beeline_MeshEK", -- Swamp of Sorrows: 2.4 MB unpacked (+0.4 MB packed, with its continent's; 355 falls, +0.15 MB as a ghost), audit 55/57
+  [1436] = "Beeline_MeshEK", -- Westfall: 1.2 MB unpacked (+0.2 MB packed, with its continent's; 210 falls, +0.09 MB as a ghost), audit 60/60
+  [1437] = "Beeline_MeshEK", -- Wetlands: 3.2 MB unpacked (+0.5 MB packed, with its continent's; 696 falls, +0.29 MB as a ghost), audit 61/62
+  [1438] = "Beeline_MeshKalimdor", -- Teldrassil: 3.0 MB unpacked (+0.5 MB packed, with its continent's; 459 falls, +0.19 MB as a ghost), audit 59/60
+  [1439] = "Beeline_MeshKalimdor", -- Darkshore: 2.7 MB unpacked (+0.4 MB packed, with its continent's; 244 falls, +0.10 MB as a ghost), audit 60/60
+  [1440] = "Beeline_MeshKalimdor", -- Ashenvale: 7.3 MB unpacked (+1.3 MB packed, with its continent's; 1314 falls, +0.56 MB as a ghost), audit 60/60
+  [1442] = "Beeline_MeshKalimdor", -- Stonetalon Mountains: 2.9 MB unpacked (+0.5 MB packed, with its continent's; 612 falls, +0.26 MB as a ghost), audit 60/60
+  [1443] = "Beeline_MeshKalimdor", -- Desolace: 4.1 MB unpacked (+0.7 MB packed, with its continent's; 888 falls, +0.36 MB as a ghost), audit 58/60
+  [1444] = "Beeline_MeshKalimdor", -- Feralas: 6.0 MB unpacked (+1.1 MB packed, with its continent's; 1327 falls, +0.56 MB as a ghost), audit 60/60
+  [1445] = "Beeline_MeshKalimdor", -- Dustwallow Marsh: 3.8 MB unpacked (+0.7 MB packed, with its continent's; 726 falls, +0.30 MB as a ghost), audit 61/62
+  [1446] = "Beeline_MeshKalimdor", -- Tanaris: 4.6 MB unpacked (+0.7 MB packed, with its continent's; 761 falls, +0.32 MB as a ghost), audit 63/63
+  [1447] = "Beeline_MeshKalimdor", -- Azshara: 4.6 MB unpacked (+0.8 MB packed, with its continent's; 851 falls, +0.35 MB as a ghost), audit 60/60
+  [1448] = "Beeline_MeshKalimdor", -- Felwood: 2.7 MB unpacked (+0.4 MB packed, with its continent's; 283 falls, +0.12 MB as a ghost), audit 57/60
+  [1449] = "Beeline_MeshKalimdor", -- Un'Goro Crater: 2.1 MB unpacked (+0.4 MB packed, with its continent's; 471 falls, +0.19 MB as a ghost), audit 60/60
+  [1451] = "Beeline_MeshKalimdor", -- Silithus: 2.9 MB unpacked (+0.5 MB packed, with its continent's; 656 falls, +0.28 MB as a ghost), audit 52/52
+  [1452] = "Beeline_MeshKalimdor", -- Winterspring: 3.3 MB unpacked (+0.6 MB packed, with its continent's; 774 falls, +0.32 MB as a ghost), audit 60/60
+  [1453] = "Beeline_MeshEK", -- Stormwind City: 2.5 MB unpacked (+0.2 MB packed, with its continent's; 312 falls, +0.13 MB as a ghost), audit 62/62
   [1455] = "Beeline_MeshEK", -- Ironforge: 0.5 MB unpacked (+0.1 MB packed, with its continent's), audit 57/59
-  [1456] = "Beeline_MeshKalimdor", -- Thunder Bluff: 0.6 MB unpacked (+0.1 MB packed, with its continent's), audit 57/59
+  [1456] = "Beeline_MeshKalimdor", -- Thunder Bluff: 0.6 MB unpacked (+0.1 MB packed, with its continent's; 101 falls, +0.04 MB as a ghost), audit 57/59
   [1458] = "Beeline_MeshEK", -- Undercity: 0.8 MB unpacked (+0.1 MB packed, with its continent's), audit 60/60
-  [2482] = "Beeline_MeshKalimdor", -- Mount Hyjal: 1.9 MB unpacked (+0.4 MB packed, with its continent's), audit 60/60
-  [2548] = "Beeline_MeshEK", -- Riverglades: 5.3 MB unpacked (+0.8 MB packed, with its continent's), audit 60/60
-  [2652] = "Beeline_MeshKalimdor", -- Shen'dralas: 0.9 MB unpacked (+0.2 MB packed, with its continent's), audit 27/27
+  [2482] = "Beeline_MeshKalimdor", -- Mount Hyjal: 1.9 MB unpacked (+0.4 MB packed, with its continent's; 388 falls, +0.16 MB as a ghost), audit 60/60
+  [2548] = "Beeline_MeshEK", -- Riverglades: 5.3 MB unpacked (+0.8 MB packed, with its continent's; 599 falls, +0.26 MB as a ghost), audit 60/60
+  [2652] = "Beeline_MeshKalimdor", -- Shen'dralas: 0.9 MB unpacked (+0.2 MB packed, with its continent's; 273 falls, +0.12 MB as a ghost), audit 27/27
 }

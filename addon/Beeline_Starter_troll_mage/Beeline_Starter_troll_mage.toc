@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: Beeline - built-in plan: troll mage
+## IconTexture: Interface\AddOns\Beeline\Media\logo
 ## Notes: Loaded by Beeline only for a troll mage with no plan of its own.
 ## Dependencies: Beeline
 ## Group: Beeline

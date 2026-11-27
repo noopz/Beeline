@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: Beeline - walk maps: Eastern Kingdoms
+## IconTexture: Interface\AddOns\Beeline\Media\logo
 ## Notes: The map line's walk grids for every zone of Eastern Kingdoms. Loaded by Beeline when you are there.
 ## Author: noopz
 ## Version: dev

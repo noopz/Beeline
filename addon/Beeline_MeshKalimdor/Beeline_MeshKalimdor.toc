@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: Beeline - detailed map line: Kalimdor
+## IconTexture: Interface\AddOns\Beeline\Media\logo
 ## Notes: Navigation meshes for Beeline's "Detailed map line" option (off by default), for the zones of Kalimdor that have it. Loaded only with the option on, when a line needs one of its zones.
 ## Author: noopz
 ## Version: dev
@@ -13,10 +14,12 @@ NavMesh1438.lua
 NavMesh1439.lua
 NavMesh1440.lua
 NavMesh1442.lua
+NavMesh1443.lua
 NavMesh1444.lua
 NavMesh1445.lua
 NavMesh1446.lua
 NavMesh1447.lua
+NavMesh1448.lua
 NavMesh1449.lua
 NavMesh1451.lua
 NavMesh1452.lua

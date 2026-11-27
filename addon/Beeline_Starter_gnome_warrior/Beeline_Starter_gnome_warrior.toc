@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: Beeline - built-in plan: gnome warrior
+## IconTexture: Interface\AddOns\Beeline\Media\logo
 ## Notes: Loaded by Beeline only for a gnome warrior with no plan of its own.
 ## Dependencies: Beeline
 ## Group: Beeline

@@ -51,6 +51,27 @@ end
 local function unzz(n) if n % 2 == 0 then return n / 2 end return -(n + 1) / 2 end
 -- a number under 65536 as two bytes, low first
 local function u16(n) return n % 256, floor(n / 256) end
+-- The off-mesh links in a packed string (tools/navmesh.js pack: from polygon, to polygon as a step from it, kind - 1
+-- both ways, 2 both ends at one spot - the from point and its height, the to point unless at the same spot, its height,
+-- yards), each given to into(polygon it comes into, { from, fx, fy, fz, to, tx, ty, tz, cost }) - the search runs
+-- backwards. -> how many
+local function readLinks(N, text, into)
+  local num, more = reader(text or "")
+  local left, top, unit, zmin = N.left, N.top, N.unit, N.zmin
+  local n = 0
+  while more() do
+    local a = num() + 1; local b = a + unzz(num()); local kind = num()
+    local ax, ay = num(), num(); local az = num() / 2 + zmin
+    local bx, by = ax, ay
+    if kind % 4 < 2 then bx, by = num(), num() end
+    local bz = num() / 2 + zmin; local cost = num()
+    local wax, way, wbx, wby = left - ax * unit, top - ay * unit, left - bx * unit, top - by * unit
+    into(b, { a, wax, way, az, b, wbx, wby, bz, cost })
+    if kind % 2 == 1 then into(a, { b, wbx, wby, bz, a, wax, way, az, cost }) end
+    n = n + 1
+  end
+  return n
+end
 
 -- Unpack a zone's mesh. Corners in half-floor units (tools/navmesh.js), heights in half yards above zmin. What stays:
 --   PC[c]    the records of polygons c*RP+1 .. (c+1)*RP, 9 bytes each: where its edges start in EC[c] (2), corner count
@@ -64,7 +85,7 @@ function Mesh.Unpack(D, pause)
   -- (cell: what the arrow reads off a line - a city's 4-yd squares, open country's 8: UI/Arrow.lua lookFor, openCountry)
   local N = { mesh = true, left = D.left, top = D.top, right = D.right, bottom = D.bottom, inst = D.inst, cell = D.city and 4 or 8,
     unit = D.unit, zmin = D.zmin }
-  local unit, left, top, zmin = D.unit, D.left, D.top, D.zmin
+  local unit, left, top = D.unit, D.left, D.top
   local tv, tz, th, tr = D.tv or 42, D.tz or 42, D.th or 42, D.tr or 42
   local cv, cz, ch, cr = 85 - tv, 85 - tz, 85 - th, 85 - tr
   -- corners (decoded inline, not by a call each: this loop is most of the unpacking); kept only while unpacking
@@ -201,19 +222,9 @@ function Mesh.Unpack(D, pause)
   local inc = {}
   -- (a link: a table of 9 numbers, ~200 bytes; a polygon's list of them ~72 more)
   local function into(q, l) local t = inc[q]; if not t then t = {}; inc[q] = t; bytes = bytes + 72 + 40 end; t[#t + 1] = l; bytes = bytes + 16 + 200 end
-  local num, more = reader(D.links)
-  local nl = 0
-  while more() do
-    local a = num() + 1; local b = a + unzz(num()); local kind = num()
-    local ax, ay = num(), num(); local az = num() / 2 + zmin
-    local bx, by = ax, ay
-    if kind < 2 then bx, by = num(), num() end
-    local bz = num() / 2 + zmin; local cost = num()
-    local wax, way, wbx, wby = left - ax * unit, top - ay * unit, left - bx * unit, top - by * unit
-    into(b, { a, wax, way, az, b, wbx, wby, bz, cost })
-    if kind % 2 == 1 then into(a, { b, wbx, wby, bz, a, wax, way, az, cost }) end
-    nl = nl + 1
-  end
+  local nl = readLinks(N, D.links, into)
+  -- (the falls only a ghost takes stay packed until a corpse run asks for them: Mesh.Falls)
+  N.fallText = D.falls
   local T4 = clock()
   -- the buckets: polygon numbers by their box (columns grow westwards, rows southwards, as the walk map's)
   local B = Mesh.BUCKET
@@ -245,6 +256,23 @@ function Mesh.Unpack(D, pause)
   N.bytes = bytes + 2 * (nc * 16 + 56)
   N.phaseMs = { T1 - T0, T2 - T1, T3 - T2, T4 - T3, clock() - T4 }
   return N
+end
+
+-- A ghost can't die of a fall: the run back to your corpse may drop off any ledge, and slide down a slope too steep to
+-- stand on. The walk maps' drops stop at 10 yd (tools/voxnav.js P.maxDrop), the most a living body takes; the falls
+-- past that are a zone's `falls` (packed as its links), for ghosts only, and read the first time a corpse run asks for
+-- them, not with the zone. -> the falls into each polygon, as Unpack's N.inc (empty when the zone has none)
+function Mesh.Falls(N)
+  if N.fallInc then return N.fallInc end
+  local inc, n = {}, 0
+  if N.fallText and N.fallText ~= "" then
+    readLinks(N, N.fallText, function(q, l)
+      local t = inc[q]; if not t then t = {}; inc[q] = t; N.bytes = N.bytes + 72 + 40 end
+      t[#t + 1] = l; N.bytes = N.bytes + 16 + 200; n = n + 1
+    end)
+  end
+  N.fallInc, N.nfalls = inc, n
+  return inc
 end
 
 -- polygon p: its edges' string and where its first edge's record starts, its corner count and ground type
@@ -408,9 +436,11 @@ Mesh.PortalPoint = portalPoint
 -- Start a search on mesh N from the target (tx, ty, tz) back to you (sx, sy, sz). Mesh.Run works on it a slice at a time;
 -- then S.found is the polygon you are in (nil: no way). A polygon's place is where the way enters it (the point of the
 -- portal nearest the straight line on to you), so what it costs is the length of a line that can really be walked.
-function Mesh.Search(N, sx, sy, sz, tx, ty, tz)
+-- ghost: the run back to your corpse - it may take the falls (Mesh.Falls) too.
+function Mesh.Search(N, sx, sy, sz, tx, ty, tz, ghost)
   local S = { N = N, mesh = true, g = {}, nxt = {}, via = {}, viaL = {}, px = {}, py = {}, closed = {}, hk = {}, hv = {}, hn = 0, starts = {},
     sx = sx, sy = sy, sz = sz, tx = tx, ty = ty, tz = tz, expansions = 0, done = false, ms = 0 }
+  if ghost then local F = Mesh.Falls(N); if next(F) then S.falls = F end end
   local goals = Mesh.Near(N, tx, ty, tz)
   local starts = Mesh.Near(N, sx, sy, sz)
   if #goals == 0 or #starts == 0 then S.done = true; return S end
@@ -436,6 +466,7 @@ function Mesh.Run(S, budgetMs)
   local N = S.N
   local g, nxt, via, viaL, px, py, closed, starts, hk, hv = S.g, S.nxt, S.via, S.viaL, S.px, S.py, S.closed, S.starts, S.hk, S.hv
   local PC, EC, inc, COST = N.PC, N.EC, N.inc, Mesh.COST
+  local falls = S.falls
   local left, top, unit = N.left, N.top, N.unit
   local sx, sy, hw = S.sx, S.sy, S.hw
   local hn = S.hn
@@ -446,6 +477,22 @@ function Mesh.Run(S, budgetMs)
     local j = hn
     while j > 1 do local q = floor(j / 2); if hk[q] <= k then break end; hk[j], hv[j] = hk[q], hv[q]; j = q end
     hk[j], hv[j] = k, v
+  end
+  -- off-mesh links l into polygon u (reached at cost gu, at ux, uy, on ground costing cu a yard)
+  local function linksInto(u, l, gu, ux, uy, cu)
+    for i = 1, #l do
+      local L = l[i]
+      local v = L[1]
+      if not closed[v] then
+        -- (walking: v -> its end of the link -> u's end -> on)
+        local nv = gu + sqrt((L[6] - ux) ^ 2 + (L[7] - uy) ^ 2) * cu + L[9]
+        local old = g[v]
+        if not old or nv < old then
+          g[v] = nv; nxt[v] = u; via[v] = nil; viaL[v] = L; px[v], py[v] = L[2], L[3]
+          push(nv + sqrt((L[2] - sx) ^ 2 + (L[3] - sy) ^ 2) * hw, v)
+        end
+      end
+    end
   end
   while hn > 0 do
     local u = hv[1]
@@ -497,22 +544,10 @@ function Mesh.Run(S, budgetMs)
         end
         ax, ay = bx, by
       end
+      -- (the links into u, and on a ghost's search the falls into it)
       local l = inc[u]
-      if l then
-        for i = 1, #l do
-          local L = l[i]
-          local v = L[1]
-          if not closed[v] then
-            -- (walking: v -> its end of the link -> u's end -> on)
-            local nv = gu + sqrt((L[6] - ux) ^ 2 + (L[7] - uy) ^ 2) * cu + L[9]
-            local old = g[v]
-            if not old or nv < old then
-              g[v] = nv; nxt[v] = u; via[v] = nil; viaL[v] = L; px[v], py[v] = L[2], L[3]
-              push(nv + sqrt((L[2] - sx) ^ 2 + (L[3] - sy) ^ 2) * hw, v)
-            end
-          end
-        end
-      end
+      if l then linksInto(u, l, gu, ux, uy, cu) end
+      if falls then l = falls[u]; if l then linksInto(u, l, gu, ux, uy, cu) end end
       if budgetMs and count % 32 == 0 and clock() - t0 > budgetMs then
         S.hn = hn; S.expansions = S.expansions + count; S.ms = S.ms + (clock() - t0)
         return false
@@ -630,9 +665,9 @@ function Mesh.Path(S, from, sx, sy, pause)
 end
 
 -- one go (tests, tools): -> path (or nil), the search, total ms
-function Mesh.Find(N, sx, sy, sz, tx, ty, tz)
+function Mesh.Find(N, sx, sy, sz, tx, ty, tz, ghost)
   local t0 = clock()
-  local S = Mesh.Search(N, sx, sy, sz, tx, ty, tz)
+  local S = Mesh.Search(N, sx, sy, sz, tx, ty, tz, ghost)
   Mesh.Run(S)
   return Mesh.Path(S), S, clock() - t0
 end

@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: ForeverRoute (old saves for Beeline)
+## IconTexture: Interface\AddOns\Beeline\Media\logo
 ## Notes: ForeverRoute is now Beeline. This holds your old ForeverRoute settings so Beeline can bring them over. Its only code says to restart the game if Beeline was installed while the game was running. Safe to delete once each of your characters has logged in with Beeline.
 ## Author: noopz
 ## Version: 2.0

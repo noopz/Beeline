@@ -104,6 +104,7 @@ for (const [side, plans] of Object.entries(sides)) {
   fs.writeFileSync(path.join(dir, name + '.toc'), [
     '## Interface: ' + iface,
     `## Title: Beeline - ${side} plans`,
+    `## IconTexture: Interface\\AddOns\\Beeline\\Media\\logo`,
     `## Notes: The built-in plans for every ${side} race and class. Loaded by Beeline only for a character with no plan of its own; only that character's plan is kept.`,
     '## Dependencies: Beeline',
     '## Group: Beeline',

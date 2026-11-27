@@ -459,8 +459,11 @@ Nav._nodesNear = nodesNear
 
 -- Start a search on grid N from the target (tx, ty, tz) back to you (sx, sy, sz); heights when known.
 -- Nav.Run works on it a slice at a time; then S.found is the node you stand on (nil: no way).
-function Nav.Search(N, sx, sy, sz, tx, ty, tz, level)
-  if N.mesh then return ns.NavMesh.Search(N, sx, sy, sz, tx, ty, tz) end
+-- ghost: the run back to your corpse - on a mesh it may drop off any ledge (NavMesh.Falls), and mobs don't come for a
+-- ghost (no ground costs more for them)
+function Nav.Search(N, sx, sy, sz, tx, ty, tz, level, ghost)
+  if N.mesh then return ns.NavMesh.Search(N, sx, sy, sz, tx, ty, tz, ghost) end
+  if ghost then level = math.huge end -- (Nav.Factors: every spawn is "far under you")
   local S = { N = N, F = Nav.Factors(N, level), w = N.cell * (N.rated and Nav.WEIGHT_RATED or Nav.WEIGHT), g = {}, nxt = {}, closed = {}, hk = {}, hv = {}, hn = 0, starts = {}, sx = sx, sy = sy, tx = tx, ty = ty, tz = tz, expansions = 0, done = false, ms = 0 }
   local goals = nodesNear(N, tx, ty, tz)
   local starts = nodesNear(N, sx, sy, sz)
@@ -711,10 +714,10 @@ function Nav.MapFor(px, py, tx, ty, inst, here, there)
 end
 
 -- One go, for tests and tools: from and to in world yards on map m. -> path (or nil), the search, total ms
-function Nav.Find(m, sx, sy, sz, tx, ty, tz, level)
+function Nav.Find(m, sx, sy, sz, tx, ty, tz, level, ghost)
   local N = Nav.Grid(m); if not N then return nil end
   local t0 = clock()
-  local S = Nav.Search(N, sx, sy, sz, tx, ty, tz, level)
+  local S = Nav.Search(N, sx, sy, sz, tx, ty, tz, level, ghost)
   Nav.Run(S)
   local P = Nav.Path(S)
   return P, S, clock() - t0
@@ -902,7 +905,7 @@ local function plan(L)
   local N = Nav.Grid(m, pause)
   -- the height you are at: where the last line had you, when you are still near it (a bridge stays a bridge)
   local sz = L.zHint
-  local S = Nav.Search(N, px, py, sz, L.wx, L.wy, L.z)
+  local S = Nav.Search(N, px, py, sz, L.wx, L.wy, L.z, nil, L.ghost)
   local slices = 1
   while not Nav.Run(S, Nav.BUDGET_MS) do slices = slices + 1; pause(); if live ~= L then return end end
   if live ~= L then return end
@@ -922,6 +925,7 @@ local function start(L)
   frame:Show()
 end
 
+-- t: { key, wx, wy, inst, z, m, ghost } - ghost: the run back to your corpse (Nav.Search)
 function Nav.Want(t)
   if not (t and t.wx and t.inst) then
     if live then local key = live.key; live = nil; frame:Hide(); ns.Fire("FR_NAVPATH", key, nil) end -- (said with or without a line, as below)
@@ -929,7 +933,7 @@ function Nav.Want(t)
   end
   if live and live.key == t.key and abs(live.wx - t.wx) < 1 and abs(live.wy - t.wy) < 1 and live.inst == t.inst then return end
   local oldKey = live and live.key
-  live = { key = t.key, wx = t.wx, wy = t.wy, inst = t.inst, z = t.z, m = t.m }
+  live = { key = t.key, wx = t.wx, wy = t.wy, inst = t.inst, z = t.z, m = t.m, ghost = t.ghost and true or nil }
   -- a new target: what is on the map for the old one goes now - its line, or the planned path drawn while there
   -- was no line (said even when the old target had no line) - and nothing is drawn until the new line is ready
   ns.Fire("FR_NAVPATH", oldKey, nil)

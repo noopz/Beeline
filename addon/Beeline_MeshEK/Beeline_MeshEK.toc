@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: Beeline - detailed map line: Eastern Kingdoms
+## IconTexture: Interface\AddOns\Beeline\Media\logo
 ## Notes: Navigation meshes for Beeline's "Detailed map line" option (off by default), for the zones of Eastern Kingdoms that have it. Loaded only with the option on, when a line needs one of its zones.
 ## Author: noopz
 ## Version: dev
@@ -15,11 +16,15 @@ NavMesh1422.lua
 NavMesh1423.lua
 NavMesh1424.lua
 NavMesh1425.lua
+NavMesh1426.lua
+NavMesh1427.lua
 NavMesh1428.lua
 NavMesh1429.lua
 NavMesh1431.lua
 NavMesh1432.lua
 NavMesh1433.lua
+NavMesh1434.lua
+NavMesh1435.lua
 NavMesh1436.lua
 NavMesh1437.lua
 NavMesh1453.lua

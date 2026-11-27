@@ -2000,6 +2000,7 @@ ns.On("FR_ROUTE_CHANGED", function()
   local list = steps()
   if Engine.current and not list[Engine.current] then Engine.current = nil end
   if Engine.view and not list[Engine.view] then Engine.view = nil end
+  if Engine.planned and not list[Engine.planned] then Engine.planned = nil end
   if lock then
     cancelling = true
     ns.Jobs.Cancel("route")

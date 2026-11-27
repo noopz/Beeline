@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.2.3 - 2026-11-27
+- Beeline has its own icon in the game's addon list (a bee in flight), on every Beeline addon: the plans, the walk maps and the detailed map line, not a question mark.
+- Detailed map line: the run back to your corpse may drop off a cliff. A ghost can't die of a fall, so its line now takes the drops off ledges too high for the living (a zone's falls, read only on a corpse run): in Azshara, from the plateau at 71.2, 29.9 to the shore below it, the line is 183 yd instead of 1,500 round by the slope. The living's lines and memory are unchanged; a zone's mesh is 1-4% bigger, and up to 1 MB more is unpacked while you're a ghost (the Barrens). The rebuilt meshes also pass the audit on the current plans' walks in Dun Morogh, Searing Gorge, Stranglethorn Vale, Swamp of Sorrows, Desolace and Felwood, so those 6 zones have the detailed line now (43 of 49).
+
 ## 3.2.2 - 2026-11-27
 - Detailed map line: Feralas is back on it (37 zones). Its mesh had lost a steep hill path the plans walk (at 53, 52: the line went round for 2,000 yd where the walk is 940 yd); corners on steep hillsides that only a diagonal step crosses now join, in every zone outside the cities. Lines that swim to Feathermoon over the deep sea floor are no longer counted as going through walls: you swim at the surface. Every zone's mesh rebuilt; all 37 pass the audit on the 3.2.1 plans' walks (Feralas 60/60, Un'Goro 60/60).
 

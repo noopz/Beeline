@@ -349,7 +349,8 @@ local function corpseTarget(i)
   if not wx then return false end
   target = { index = i, corpse = true, m = c.m, x = c.x, y = c.y, r = 8, wx = wx, wy = wy, winst = winst, label = "Your corpse",
     key = "corpse:" .. math.floor(wx) .. ":" .. math.floor(wy) }
-  if ns.Nav then ns.Nav.Want({ key = target.key, wx = wx, wy = wy, inst = winst, m = c.m }) end
+  -- (a ghost's line: off any ledge on the way - a ghost can't die of the fall)
+  if ns.Nav then ns.Nav.Want({ key = target.key, wx = wx, wy = wy, inst = winst, m = c.m, ghost = true }) end
   f.label:SetText(target.label)
   f.arrow:Show(); f.check:Hide(); f.pulse:Stop(); f.ring:SetAlpha(0)
   f:SetShown(ns.db.arrow and true or false)
