@@ -923,7 +923,7 @@ function Next.PickupFirst(list, planned, pick, px, py, pinst, fits)
     -- (this visit only: a step with a known spot beyond Next.HERE_FAR ends it; a later visit here waits)
     if j > planned and s.m and not s.unknown then local dd = d2(s); if not dd or dd > Next.HERE_FAR ^ 2 then break end end
     if s.k == "accept" and s.q and E.Status(j) == "todo" and (not E.Available or E.Available(j)) and not (ns.Nope and ns.Nope(s.q))
-      and not (E.Outlevelled and E.Outlevelled(s)) and (not fits or fits(j))
+      and not (E.Outlevelled and E.Outlevelled(s)) and (not fits or fits(j)) and not Next.GiverOff(s)
       -- (only one you'd walk past or come back for: picked up later passing back through town, it needn't come first -
       -- the pick audit found the town pick-up first lost time, kept for these it finds what a player feels)
       and Next.TownPickupNeeded(pick or planned, j, planned) then
@@ -940,6 +940,10 @@ end
 -- here, load, cap, roomInLog, sig, now, holdPlanned, holdAt, stops, byStep, add, leavesZone, count, scanEnd, wload, ... }
 
 -- the stops and the one way into them, add(j, extra) -> the stop, or nil (not one now)
+-- a pick-up from a giver the card must not send you to now (Avail.GiverOff: unfriendly to you, or you said they have
+-- nothing for you at this level): never an extra, nor taken before the plan's own step
+local function giverOff(s) return s.k == "accept" and s.npc ~= nil and ns.Avail ~= nil and ns.Avail.GiverOff ~= nil and ns.Avail.GiverOff(s.npc) end
+Next.GiverOff = giverOff
 local function candidates(c)
   local E, list, planned, px, py, pinst = c.E, c.list, c.planned, c.px, c.py, c.pinst
   local byStep = {}
@@ -1051,6 +1055,9 @@ local function gatherWindow(c)
       if s.k == "turnin" then wload = wload - 1 end
       count = count + 1
       if count >= Next.WINDOW then break end
+    elseif st == "todo" and j ~= planned and giverOff(s) then
+      -- (a pick-up from a giver who won't talk to you, or has nothing for you now: passed over, never taken early - the plan's
+      -- own step there still shows, and its "nothing for you" then judges the rest)
     elseif st == "todo" then
       -- (a pick-up whose earlier chain quest isn't handed in is not offered yet: it waits where the plan has it)
       if Next.KIND[s.k] and wpos(s) and (s.k ~= "accept" or ((not E.Available or E.Available(j)) and wload + ((j == pfAny) and 0 or reserve) < cap)) then
@@ -1120,7 +1127,7 @@ local function gatherExtras(c)
           local prize = Next.Prize(list, s, planned, true)
           -- (or the one the card took, Next.taken: taking it makes BehindYou false, which would drop it from its own
           -- candidates; and only one that taking makes a step to do, Engine.TodoIfTaken - e.g. not a spent breadcrumb)
-          if prize > 0 and (E.BehindYou(s) or Next.taken == s) and (not E.Available or E.Available(j)) and not (ns.Nope(s.q))
+          if prize > 0 and (E.BehindYou(s) or Next.taken == s) and (not E.Available or E.Available(j)) and not (ns.Nope(s.q)) and not giverOff(s)
             and (not E.TodoIfTaken or E.TodoIfTaken(j)) then
             found[#found + 1] = { j = j, d2 = d2, prize = prize }
           end

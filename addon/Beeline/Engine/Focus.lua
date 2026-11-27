@@ -18,7 +18,13 @@ local WINDOW = 10
 Engine.READY_NEAR = 300  -- yards: near enough that the card takes you there now (the town you are in), when clearly nearer than the plan
 local lastHave = {}   -- [step key] = objective count last seen
 local progressAt = {} -- [step key] = GetTime() when that count last went up
+local progressWhere = {} -- [step key] = { x, y, inst }: where you stood when it did (world yards)
 Engine.PROGRESS_HOLD = 90 -- a focus your kills made holds this long after the last one, wherever you are
+-- and while you stay where they counted (within PROGRESS_YD of the last one), up to PROGRESS_STAY after it: a rare drop
+-- (12 Eldarath Relics off naga) can take longer than PROGRESS_HOLD between counts, and the card went off to a hand-in
+-- 300 yd away mid-farm
+Engine.PROGRESS_YD = 200
+Engine.PROGRESS_STAY = 600
 
 -- kind: "area" (you're standing at it / it's right next to you) or "progress" (your kills / loot count for it).
 -- They're held differently in UpdateFocus: kill spots are often wider than the one marker the planner picks.
@@ -205,6 +211,7 @@ function Engine.UpdateFocus(px, py, pinst)
     end
     return
   end
+  Engine.pos = { px, py, pinst, GetTime() } -- (where you are, for a hold your kills made: Engine.RecentProgress)
   local planned = Engine.planned or Engine.current
   if not planned then return end
   local list = steps()
@@ -233,10 +240,9 @@ function Engine.UpdateFocus(px, py, pinst)
       -- a finished quest's hand-in the card is taking you to: held while you head there (it was picked from up to
       -- READY_NEAR away), until it's handed in
       if (Engine.focusWhy == "ready" or Engine.focusWhy == "chosen") and d <= Engine.READY_NEAR + 40 and State.QuestReady(s.q) then return end
-      local at = Engine.focusWhy == "progress" and progressAt[key(Engine.focus)]
-      if at and GetTime() - at <= Engine.PROGRESS_HOLD then return end
+      if Engine.focusWhy == "progress" and Engine.RecentProgress(Engine.focus) then return end
     end
-    Engine.focus, Engine.focusWhy = nil, nil
+    Engine.LetGoFocus()
   end
   local ps = list[planned]
   local dP = ps and distTo(ps, px, py, pinst)
@@ -283,6 +289,16 @@ function Engine.UpdateFocus(px, py, pinst)
   if pick then setFocus(pick, why) end
 end
 
+-- where you stand as a count moves: the arrow's last measure when fresh, else asked once (a count, not every frame)
+local HBD = LibStub and LibStub("HereBeDragons-2.0", true)
+local function whereNow()
+  local p = Engine.pos
+  if p and GetTime() - (p[4] or 0) < 3 then return { p[1], p[2], p[3] } end
+  local x, y, inst
+  if HBD then x, y, inst = HBD:GetPlayerWorldPosition() end
+  if x then return { x, y, inst } end
+  return p and { p[1], p[2], p[3] } or nil
+end
 -- kills / loot counting for a later objective: that's what you're doing (FR_PROGRESS: only a count moved)
 local function countsMoved()
   local planned = Engine.planned or Engine.current
@@ -302,6 +318,7 @@ local function countsMoved()
       if o and o.have then
         if lastHave[k] and o.have > lastHave[k] and not o.finished then
           progressAt[k] = GetTime()
+          progressWhere[k] = whereNow()
           if j == planned then
             if (Engine.focus and Engine.focus ~= planned) or Engine.current ~= planned then Engine.focus, Engine.focusWhy = nil, nil; Engine.Refresh() end
           elseif Engine.focus == j then Engine.focusWhy = "progress" -- shown for being here, now also counting: hold it as such
@@ -314,9 +331,23 @@ local function countsMoved()
 end
 ns.On("FR_STATE", countsMoved)
 ns.On("FR_PROGRESS", countsMoved)
-ns.On("FR_ROUTE_CHANGED", function() Engine.focus = nil; wipe(lastHave); wipe(progressAt) end)
--- did your kills or loot count for this step lately (Engine.PROGRESS_HOLD)? You're plainly on it, then
+ns.On("FR_ROUTE_CHANGED", function() Engine.focus = nil; wipe(lastHave); wipe(progressAt); wipe(progressWhere) end)
+-- did your kills or loot count for this step lately (Engine.PROGRESS_HOLD), or are you still where they counted
+-- (Engine.PROGRESS_YD, Engine.PROGRESS_STAY)? You're plainly on it, then. Your place is the one the arrow's check
+-- measured last (Engine.pos, once a second): no position read here
 function Engine.RecentProgress(i)
+  local k = i and key(i)
+  local t = k and progressAt[k]
+  if not t then return false end
+  local age = GetTime() - t
+  if age <= Engine.PROGRESS_HOLD then return true end
+  if age > Engine.PROGRESS_STAY then return false end
+  local at, p = progressWhere[k], Engine.pos
+  return at ~= nil and p ~= nil and p[3] == at[3] and (p[1] - at[1]) ^ 2 + (p[2] - at[2]) ^ 2 <= Engine.PROGRESS_YD ^ 2
+end
+-- why a hold your kills made ended (for the why line): "no kill or loot counted for it in N s, and you moved away"
+function Engine.ProgressEnded(i)
   local t = i and progressAt[key(i)]
-  return t ~= nil and GetTime() - t <= Engine.PROGRESS_HOLD
+  if not t then return "nothing counted for it" end
+  return "no kill or loot counted for it in " .. math.floor(GetTime() - t) .. " s" .. (GetTime() - t > Engine.PROGRESS_STAY and "" or ", and you moved away from where it counted")
 end

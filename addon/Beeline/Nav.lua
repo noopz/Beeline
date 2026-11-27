@@ -95,7 +95,23 @@ local function indexOf(m) return m and BeelineNavIndex and BeelineNavIndex[m] or
 -- tools/nav-audit.js). The cities' grids (in this addon, not a continent's) are not affected.
 -- Off everywhere outdoors for now (false); a table { [uiMap] = true } turns zones on once they pass the audit (node tools/nav-audit.js; install.sh checks each one listed still does).
 Nav.OUTDOOR = false -- (3.1.1: the outdoor walk maps are too coarse for walls and cliffs - Nethergarde, Blasted Lands; tools/nav-audit.js decides when a zone comes back)
+-- The navigation mesh (NavMesh.lua): the "Detailed map line" option (ns.db.meshLine, off by default). With it on, the
+-- zones of Nav/MeshIndex.lua (NavMesh.MAPS: those whose mesh passes the audit) draw the line on their mesh, outdoors
+-- too - the walls and cliffs the 8-yard squares lost are polygon edges - loaded from their continent's addon
+-- (Beeline_MeshEK, Beeline_MeshKalimdor) when a line first needs one, never in combat. With it off nothing of it is
+-- loaded and the line is as before: the planned path outdoors, the cities' grids. docs/research/navigation-mesh.md
+function Nav.MeshWanted() return ns.db ~= nil and ns.db.meshLine == true end
+function Nav.MeshOn(m)
+  if not (m and ns.NavMesh and Nav.MeshWanted()) then return false end
+  local addon = ns.NavMesh.MAPS[m]
+  if not addon then return false end
+  local l = Nav.loaded[addon]
+  -- (its addon would not load, or came without this zone's mesh: the zone is as with the option off)
+  if l == false or (l == true and not (BeelineNavMesh and BeelineNavMesh[m])) then return false end
+  return true
+end
 function Nav.Outdoor(m)
+  if Nav.MeshOn(m) then return true end
   local o = Nav.OUTDOOR
   return o == true or (type(o) == "table" and m ~= nil and o[m] == true)
 end
@@ -118,6 +134,14 @@ end
 -- map m's packed grid, its continent's addon loaded first when it is not here yet. nil: no grid for m, or not now
 function Nav.Data(m)
   if off(m) then return nil end
+  if Nav.MeshOn(m) then
+    local M = BeelineNavMesh and BeelineNavMesh[m]
+    if M then return M end
+    local addon = ns.NavMesh.MAPS[m]
+    if Nav.Load(addon) and BeelineNavMesh and BeelineNavMesh[m] then return BeelineNavMesh[m] end
+    if Nav.loaded[addon] == nil then return nil end -- (not now: combat)
+    if off(m) then return nil end -- (it did not load: the zone is as with the option off)
+  end
   local D = m and BeelineNavData and BeelineNavData[m]
   if D then return D end
   local I = indexOf(m)
@@ -128,6 +152,7 @@ end
 -- is there a grid for m (here, or in an addon that can still be loaded)?
 function Nav.Has(m)
   if off(m) then return false end
+  if Nav.MeshOn(m) then return true end
   if m and BeelineNavData and BeelineNavData[m] then return true end
   local I = indexOf(m)
   return (I and I[1] and Nav.loaded[I[1]] ~= false) and true or false
@@ -320,15 +345,18 @@ function Nav.Mob(N, sq, level)
   return b % 64 >= 32 and 2 or 1
 end
 
--- unpacked zones (the last Nav.KEEP used)
+-- unpacked zones (the last Nav.KEEP used; a mesh only while you or what you walk to is in its zone: Nav.Prune)
 local grids, gridUse, useN = {}, {}, 0
 function Nav.Grid(m, pause)
   if off(m) then return nil end
   local N = grids[m]
+  -- (the option changed since it was unpacked: a grid where the mesh is wanted now, or the other way round)
+  if N and (N.mesh == true) ~= Nav.MeshOn(m) then grids[m], gridUse[m] = nil, nil; N = nil end
   if not N then
     local D = Nav.Data(m); if not D then return nil end
     local t0 = clock()
-    N = Nav.Unpack(D, pause)
+    -- (a mesh's data has polygons, a grid's squares)
+    if D.polys then N = ns.NavMesh.Unpack(D, pause) else N = Nav.Unpack(D, pause) end
     N.m = m
     N.unpackMs = clock() - t0
     grids[m] = N
@@ -343,6 +371,17 @@ function Nav.Grid(m, pause)
   return N
 end
 function Nav.Forget() grids, gridUse = {}, {} end
+-- drop the unpacked meshes of the zones not in keep ({ [uiMap] = true }; nil: all of them) - the memory goes back
+function Nav.Prune(keep)
+  for k, N in pairs(grids) do if N.mesh and not (keep and keep[k]) then grids[k], gridUse[k] = nil, nil end end
+end
+-- the zones whose meshes are unpacked: { uiMap, ... }, and the memory they hold (about, as the game's Lua counts it)
+function Nav.Meshes()
+  local out, bytes = {}, 0
+  for k, N in pairs(grids) do if N.mesh then out[#out + 1] = k; bytes = bytes + (N.bytes or 0) end end
+  table.sort(out)
+  return out, bytes
+end
 function Nav._grids() return grids end
 
 -- a node's square, and the middle of a square in world yards (as HereBeDragons counts them)
@@ -421,6 +460,7 @@ Nav._nodesNear = nodesNear
 -- Start a search on grid N from the target (tx, ty, tz) back to you (sx, sy, sz); heights when known.
 -- Nav.Run works on it a slice at a time; then S.found is the node you stand on (nil: no way).
 function Nav.Search(N, sx, sy, sz, tx, ty, tz, level)
+  if N.mesh then return ns.NavMesh.Search(N, sx, sy, sz, tx, ty, tz) end
   local S = { N = N, F = Nav.Factors(N, level), w = N.cell * (N.rated and Nav.WEIGHT_RATED or Nav.WEIGHT), g = {}, nxt = {}, closed = {}, hk = {}, hv = {}, hn = 0, starts = {}, sx = sx, sy = sy, tx = tx, ty = ty, tz = tz, expansions = 0, done = false, ms = 0 }
   local goals = nodesNear(N, tx, ty, tz)
   local starts = nodesNear(N, sx, sy, sz)
@@ -445,6 +485,7 @@ end
 
 -- work on a search for up to budgetMs (nil: to the end); true when it is finished
 function Nav.Run(S, budgetMs)
+  if S.mesh then return ns.NavMesh.Run(S, budgetMs) end
   if S.done then return true end
   local N = S.N
   local g, nxt, closed, starts, hk, hv = S.g, S.nxt, S.closed, S.starts, S.hk, S.hv
@@ -591,6 +632,7 @@ end
 -- walked, straightened wherever the straight run is walkable too and no dearer. Points are { wx, wy, z or nil }:
 -- first where you stand, last the target itself. sx, sy: where you stand now (default: where the search started).
 function Nav.Path(S, from, sx, sy, pause)
+  if S.mesh then return ns.NavMesh.Path(S, from, sx, sy, pause) end
   from = from or S.found
   if not (S.done and from and S.g[from]) then return nil end
   local N, g = S.N, S.g
@@ -854,6 +896,9 @@ local function plan(L)
     return
   end
   local t0 = clock()
+  -- (a mesh stays unpacked only for the zone you are in and the one you walk to: the others' go before this one comes)
+  L.map = m
+  Nav.Prune({ [m] = true, [here or 0] = true, [L.m or 0] = true })
   local N = Nav.Grid(m, pause)
   -- the height you are at: where the last line had you, when you are still near it (a bridge stays a bridge)
   local sz = L.zHint
@@ -907,7 +952,7 @@ local function rejoin(L, px, py)
   if L.path then local seg = L.path.cursor; local a = L.path.pts[seg]; zHint = a and a[3] end
   L.zHint = zHint
   if S and S.done and S.found then
-    local cands = nodesNear(S.N, px, py, zHint)
+    local cands = S.mesh and ns.NavMesh.Near(S.N, px, py, zHint) or nodesNear(S.N, px, py, zHint)
     local best, bg
     for _, n in ipairs(cands) do if S.closed[n] and S.g[n] and (not bg or S.g[n] < bg) then best, bg = n, S.g[n] end end
     if best then
@@ -968,6 +1013,26 @@ function Nav.Settle(maxFrames)
   return n
 end
 ns.On("FR_LOADED", function() ns.On("PLAYER_ENTERING_WORLD", function() if live then live.waiting = true; frame:Show() end end) end)
+-- you left a zone: its mesh goes, unless the line still runs on it or what you walk to is there
+function Nav.LeftZone()
+  local here = ns.State and ns.State.Position and ns.State.Position() or nil
+  local keep = { [here or 0] = true }
+  if live then keep[live.m or 0] = true; keep[live.map or 0] = true end
+  Nav.Prune(keep)
+end
+ns.On("ZONE_CHANGED_NEW_AREA", function() Nav.LeftZone() end)
+-- the option: on, the zones that have a mesh get it; off, every mesh goes and the line is as before (a reset of the
+-- settings fires with no key: only a real change counts)
+local meshWas
+ns.On("FR_SETTINGS", function(key)
+  if key ~= nil and key ~= "meshLine" then return end
+  local now = Nav.MeshWanted()
+  if not now then Nav.Prune(nil) end
+  if key == nil and now == meshWas then return end
+  meshWas = now
+  if live then live.S = nil; live.path = nil; ns.Fire("FR_NAVPATH", live.key, nil); start(live) end
+end)
+ns.On("FR_LOADED", function() meshWas = Nav.MeshWanted() end)
 
 -- /bee nav: what the game says about where you, the step and the minimap are - to tell a wrong coordinate from a
 -- wrong placement (docs/research/navigation-paths.md, "Telling the causes apart in game")
@@ -1007,6 +1072,8 @@ function Nav.Report()
       (abs(md[3] - D.left) > 2 or abs(md[4] - D.top) > 2 or abs(md[1] - (D.left - D.right)) > 2) and " - THEY DIFFER: the plan's coordinates for this map are off" or " (the same)")
   elseif zm then add("map %s: %s", tostring(zm), D and "walk map present" or "no walk map shipped - the line falls back to the planned path") end
   local s = Nav.stats or {}
+  local meshes, mb = Nav.Meshes()
+  add("detailed map line: %s%s", Nav.MeshWanted() and "on" or "off", #meshes > 0 and string.format("; meshes unpacked: %s (about %.1f MB)", table.concat(meshes, ", "), mb / 1048576) or "")
   for a, ok in pairs(Nav.loaded) do add("walk maps %s: %s", a, ok and ("loaded in " .. f(Nav.loadMs[a]) .. " ms") or "would not load (not installed?)") end
   if live then
     add("line: %s; last search on map %s: %s squares in %s ms over %s frames (unpack %s ms), %s yd in %s points, re-read %s times", live.path and "drawn" or (live.job and "being found" or (live.none and "no walk map holds both ends" or (live.loading and "waits for the fight to end to load this continent's walk maps" or "none"))), tostring(s.map), tostring(s.expansions), f(s.searchMs), tostring(s.frames), f(s.unpackMs), f(s.len), tostring(s.points), tostring(s.rejoined or 0))

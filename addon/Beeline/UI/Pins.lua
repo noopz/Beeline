@@ -427,7 +427,7 @@ ns.On("FR_LOADED", function() ns.NewTicker(2, ns.Guard("pins", function() Pins.U
 ns.On("FR_STEP", function() local t0 = debugprofilestop and debugprofilestop(); Pins.Update(); if t0 and ns.Time then ns.Time("pins on step", debugprofilestop() - t0) end end)
 ns.On("FR_DUNGEON", function() Pins.Update(true) end)
 -- a setting changed: rebuilt for the pins' own settings and the ones that retarget the arrow (its line is drawn here)
-Pins.SETTING_KEYS = { pins = true, pinCount = true, pathLine = true, miniPin = true, miniPinScale = true, miniPath = true,
+Pins.SETTING_KEYS = { pins = true, pinCount = true, pathLine = true, meshLine = true, miniPin = true, miniPinScale = true, miniPath = true,
   arrow = true, gameNav = true, smartNext = true, trails = true }
 ns.On("FR_SETTINGS", function(key) if key == nil or Pins.SETTING_KEYS[key] then Pins.Update(true) end end)
 ns.On("FR_ROUTE_CHANGED", function() Pins.Update(true) end)

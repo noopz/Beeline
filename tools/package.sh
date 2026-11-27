@@ -41,6 +41,17 @@ for d in addon/Beeline_Nav*/; do
   cp LICENSES/GPL-3.0.txt "dist/pkg/$n/LICENSE-GPL-3.0.txt"; cp NOTICE "dist/pkg/$n/NOTICE"
 done
 [ "$nav" -eq 2 ] || { echo "package: expected the two walk-map addons (Beeline_NavEK, Beeline_NavKalimdor), found $nav"; exit 1; }
+# the Detailed map line's navigation meshes (an option, off by default): one load-on-demand addon per continent with the
+# zones that pass the audit (tools/navmesh.js ship); baked from the walk maps alone, so CC BY-NC-SA like the addon
+mesh=0
+for d in addon/Beeline_Mesh*/; do
+  n=$(basename "$d"); cp -r "$d" dist/pkg/; mesh=$((mesh + 1))
+  sed -i "s/^## Version: .*/## Version: $VER/" "dist/pkg/$n/$n.toc"
+  grep -q '^## LoadOnDemand: 1' "dist/pkg/$n/$n.toc" || { echo "package: $n is not load-on-demand"; exit 1; }
+  grep -q '^## Dependencies: Beeline' "dist/pkg/$n/$n.toc" || { echo "package: $n does not depend on Beeline"; exit 1; }
+  cp LICENSE "dist/pkg/$n/LICENSE"; cp NOTICE "dist/pkg/$n/NOTICE"
+done
+[ "$mesh" -eq 2 ] || { echo "package: expected the two mesh addons (Beeline_MeshEK, Beeline_MeshKalimdor), found $mesh"; exit 1; }
 if command -v zip >/dev/null; then (cd dist/pkg && zip -qr "../Beeline-$VER.zip" .)
 else powershell -NoProfile -Command "Compress-Archive -Path 'dist/pkg/*' -DestinationPath 'dist/Beeline-$VER.zip'"; fi
 echo "dist/Beeline-$VER.zip: $(ls dist/pkg | wc -l) addon folders"

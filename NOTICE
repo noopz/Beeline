@@ -16,6 +16,9 @@ LICENSING
    where users will see it: in the README or project description wherever a copy or adaptation is published, and in
    any in-game about, help or options panel it shows.
 
+   This includes the navigation meshes of the "Detailed map line" option (addon/Beeline_MeshEK/,
+   addon/Beeline_MeshKalimdor/): baked by tools/navmesh.js from the walk maps alone, with no quest data in them.
+
 2. Quest data. The files below are generated from QuestieDB (https://github.com/Questie/QuestieDB) quest, NPC, object
    and item data. The Questie team allows copying its content under the GNU General Public License version 3, so these
    files are licensed under GPL-3.0 (see LICENSES/GPL-3.0.txt), not CC BY-NC-SA. Thanks to the Questie team and its

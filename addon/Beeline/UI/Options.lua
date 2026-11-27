@@ -92,6 +92,10 @@ function Options.ApplyPreset(name)
   ns.Fire("FR_SETTINGS")
 end
 
+-- the "Detailed map line" toggle's tooltip (its memory: the continent's meshes, loaded with it, and the zones unpacked;
+-- tools/navmesh.js ship prints both per zone)
+Options.MESH_TIP = "Draws the line from where you stand along the ground, round walls and cliffs, in zones that have it. Uses more memory: about 10 MB, plus 1-8 MB for the zone you're in."
+
 -- ---------------------------------------------------------------- controls (placed by the page's cursor, page.y)
 
 -- the search index: every control, with its tab and what it can be found by
@@ -260,6 +264,7 @@ function BUILD.map(p)
   toggle(p, "Route pins", "pins")
   slider(p, "Steps pinned", "pinCount", 1, 8, 1, "%d", 4, "pins", "pins map minimap")
   toggle(p, "Walking path", "pathLine")
+  Options.meshToggle = toggle(p, "Detailed map line", "meshLine", Options.MESH_TIP)
   toggle(p, "Minimap marker", "miniPin", "Off: only the game's marker, with its above/below arrow.")
   slider(p, "Minimap marker size", "miniPinScale", 0.5, 1.5, 0.05, nil, 0.5, "miniPin", "minimap marker pin size smaller bigger hide")
 end

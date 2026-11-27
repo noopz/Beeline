@@ -66,7 +66,7 @@ local function build()
   -- a struck-through "!", "the giver doesn't offer it": the giver has nothing for you (no window opens, so the addon
   -- can't tell by itself). Off your route until you level up, like a giver who lists other quests but not this one
   cur.notOffered = Style.IconButton(cur, "btn-no-offer", Card.TOOL, function() ns.Engine.NotOffered() end,
-    { "The giver doesn't offer it", "Click if the quest giver has nothing for you. The quest leaves your route until your next level (a level or a quest you haven't done can be the reason), then it's tried again. Turned down a second time, it stays off until the game offers it. Its chain stays." })
+    { "The giver doesn't offer it", "Click if the quest giver has nothing for you. This quest and the giver's others you could take now leave your route until your next level (a level or a quest you haven't done can be the reason), then they're tried again. Turned down a second time, a quest stays off until the game offers it. Its chain stays; Undo brings them back." })
   -- (a bigger glyph than the footer's buttons: smaller, the "!" under its stroke is a smudge)
   for _, b in ipairs({ cur.nope, cur.notOffered }) do b.icon:SetSize(Card.TOOL * 0.75, Card.TOOL * 0.75) end
   -- "not now": a stop the route took in from where you are (a hand-in while you're here) leaves the card until you move
@@ -783,7 +783,7 @@ ns.On("FR_TOGGLE", function() if not f then return end; ns.db.hidden = not ns.db
 -- a setting changed (Style applied the scale): the card's width and contents, the Target macro (out of combat; the
 -- card refills the button then), and next frame the same place on the screen at the new scale. Not for the settings
 -- of the arrow and the map pins
-Card.OTHERS_KEYS = { arrow = true, arrowScale = true, gameNav = true, pins = true, pinCount = true, pathLine = true,
+Card.OTHERS_KEYS = { arrow = true, arrowScale = true, gameNav = true, pins = true, pinCount = true, pathLine = true, meshLine = true,
   miniPin = true, miniPinScale = true, miniPath = true }
 ns.On("FR_SETTINGS", function(key)
   if not f or Card.OTHERS_KEYS[key] then return end

@@ -4,6 +4,13 @@
 -- map. Both are recorded per character in BeelineChar.avail:
 --   seen[q] = { t, lvl }       the game offered it (a giver listed it, or the map showed it)
 --   no[q]   = { t, lvl, npc }  you talked to its giver and it wasn't among the offers, at that level
+--   giver[npc] = { t, lvl, none } "the giver has nothing for you" clicked at that level: all of that giver's pick-ups
+--                                    are judged not offered (no[q]), and no stop added or taken early sends you back
+--                                    to them at that level (Avail.GiverOff)
+--   giver[npc] = { t, lvl, hostile }  unfriendly or hostile to you (UnitReaction <= 3, read as you target it, mouse
+--                                    over it or its nameplate shows): you can't talk to them, so every quest from or to
+--                                    them is off the route until they read friendlier, or their window opens. No
+--                                    reputation data needed: the game's own reaction is the gate
 -- A quest the game didn't offer is left off your route (and every plan, tools/snapshot.js) until you level up - a
 -- level can be the reason - or the game offers it after all. The planner reads the same record.
 local _, ns = ...
@@ -13,8 +20,8 @@ ns.Avail = Avail
 local call, plain, Sub = ns.Util.Call, ns.Util.Plain, ns.Util.Sub
 local function store()
   local c = BeelineChar
-  if not c then return { seen = {}, no = {} } end
-  local a = Sub(c, "avail"); Sub(a, "seen"); Sub(a, "no")
+  if not c then return { seen = {}, no = {}, giver = {} } end
+  local a = Sub(c, "avail"); Sub(a, "seen"); Sub(a, "no"); Sub(a, "giver")
   return a
 end
 local function level() return (UnitLevel and UnitLevel("player")) or 0 end
@@ -29,7 +36,9 @@ function Avail.Seen(q, fromMap)
   A.seen[q] = { t = time(), lvl = level() }
   local no = A.no[q]
   if not no then return end
-  if fromMap and no.lvl == level() then
+  -- (nor once turned down at two levels, its quests before it done - no.stay: a level isn't the reason, and the map
+  -- doesn't say this giver has it. Only the giver listing it, or you undoing it, brings it back)
+  if fromMap and (no.lvl == level() or no.stay) then
     if not no.mapSaid then
       no.mapSaid = true
       if ns.Why then ns.Why("avail", "quest " .. q .. ": " .. tostring(no.npc) .. " didn't offer it, though the map shows it on offer here - someone else may give it") end
@@ -102,14 +111,75 @@ function Avail.Pvp(q) local P = ns.PVP_QUESTS; return P and q and P[q] or nil en
 -- A quest you have or did is never this.
 function Avail.Unavailable(q)
   if Avail.Pvp(q) then return true end -- (a battleground quest: never offered to a leveling route)
-  if Avail.Needs(q) then return true end
+  local need = Avail.Needs(q)
   local n = q and BeelineChar and BeelineChar.avail and BeelineChar.avail.no and BeelineChar.avail.no[q]
-  if not n then return false end
+  if not (need or n) then return false end
+  -- (in your log or done: it was offered - whatever the data says it needs, or a "not offered" from before:
+  -- Preserving Eldarath taken a moment after its giver's window was read; a reputation or skill the data asks that
+  -- Forever doesn't. Asked only for a quest that would be left off, so it costs nothing else)
+  if ns.State and (ns.State.OnQuest(q) or ns.State.IsCompleted(q)) then return false end
+  if need then return true end
   if n.stay then return true end
   for _, p in ipairs(n.waits or {}) do if ns.State and ns.State.IsCompleted(p) then return false end end
   if n.waits and n.req and (n.lvl or 0) >= n.req then return true end -- it waits on that quest, not on a level
   return level() <= (n.lvl or 0)
 end
+
+-- a giver the card must not send you to: one unfriendly or hostile to you (no talking), or one you said has nothing for
+-- you at this level. Opportunistic stops - a side quest added, a stop taken before the plan's step - leave them out;
+-- their own steps are off the route through no[q] (none) or Avail.Hostile (statusRaw). A table look: asked per stop
+function Avail.GiverOff(npc)
+  local G = npc and BeelineChar and BeelineChar.avail and BeelineChar.avail.giver
+  local g = G and G[npc]
+  if not g then return false end
+  return g.hostile or (g.none and level() <= (g.lvl or 0)) or false
+end
+-- unfriendly or hostile to you, as the game last said (UnitReaction <= 3): every quest from or to them is off the route
+function Avail.Hostile(npc)
+  local G = npc and BeelineChar and BeelineChar.avail and BeelineChar.avail.giver
+  local g = G and G[npc]
+  return g ~= nil and g.hostile == true
+end
+-- the npc names of the route's pick-ups and hand-ins (kept per list generation: a nameplate asks for every mob in view)
+local npcsMemo = setmetatable({}, { __mode = "k" })
+local function routeNpcs()
+  local list = BeelineData and BeelineData.steps
+  if not list then return {} end
+  local c = npcsMemo[list]
+  if c and c.gen == (list._gen or 0) then return c.set end
+  c = { gen = list._gen or 0, set = {} }
+  for _, s in ipairs(list) do if s.npc and (s.k == "accept" or s.k == "turnin") then c.set[s.npc] = true end end
+  npcsMemo[list] = c
+  return c.set
+end
+-- the game's reaction of a unit you target, mouse over or see the nameplate of: a route giver unfriendly or hostile to
+-- you (UnitReaction(unit, "player") <= 3) can't be talked to - its quests leave the route at once, with a why line;
+-- read friendly again (your reputation went up), they come back. Cheap: a name look-up first, the reaction only for a
+-- route giver, and nothing changes unless the reading does
+function Avail.ReadUnit(unit)
+  if not (unit and UnitReaction and UnitName) then return end
+  local name = call(UnitName, unit)
+  if not (plain(name) and type(name) == "string" and routeNpcs()[name]) then return end
+  if UnitIsPlayer and call(UnitIsPlayer, unit) then return end
+  local r = call(UnitReaction, unit, "player")
+  if not (plain(r) and type(r) == "number") then return end
+  local A = store()
+  local g = A.giver[name]
+  if r <= 3 then
+    if g and g.hostile then return end
+    A.giver[name] = { t = time(), lvl = level(), hostile = true }
+    if ns.Why then ns.Why("avail", name .. " is " .. (r <= 2 and "hostile" or "unfriendly") .. " to you and won't talk to you: its quests are off your route until that changes") end
+    ns.Print(name .. " won't talk to you (" .. (r <= 2 and "hostile" or "unfriendly") .. "): its quests are off your route for now.")
+    if ns.Engine then ns.Engine.Refresh() end
+  elseif g and g.hostile then
+    A.giver[name] = nil
+    if ns.Why then ns.Why("avail", name .. " is no longer unfriendly to you: its quests are back on your route") end
+    if ns.Engine then ns.Engine.StateChanged(); ns.Engine.Refresh() end
+  end
+end
+ns.On("PLAYER_TARGET_CHANGED", ns.Guard("avail", function() Avail.ReadUnit("target") end))
+ns.On("UPDATE_MOUSEOVER_UNIT", ns.Guard("avail", function() Avail.ReadUnit("mouseover") end))
+ns.On("NAME_PLATE_UNIT_ADDED", ns.Guard("avail", function(unit) Avail.ReadUnit(unit) end))
 
 -- the quests a giver you're talking to offers: ids, or nil when the game didn't say
 local function offeredHere(event)
@@ -149,14 +219,45 @@ function Avail.Read(event)
   local npc = call(UnitName, "npc")
   return { ids = ids, partial = partial, npc = plain(npc) and type(npc) == "string" and npc or nil }
 end
+-- quests you took in the last few seconds: offered, whatever the log says yet. Taking one at a giver with several
+-- reopens its window without it, before the log is read again (State: 0.5 s after) - Commander Truesong "didn't
+-- offer" Preserving Eldarath, taken the moment before, and it was left off the route with its steps
+local justTaken = {}
+Avail.TAKEN_FOR = 10
+local function takenRecently(q)
+  local t = justTaken[q]
+  return t and ((GetTime and GetTime()) or 0) - t < Avail.TAKEN_FOR
+end
+function Avail.Taken(q)
+  if not q then return end
+  justTaken[q] = (GetTime and GetTime()) or 0
+  if Avail.Seen(q) and ns.Engine then ns.Engine.Refresh() end -- (taken: offered - a "not offered" goes)
+end
+ns.On("QUEST_ACCEPTED", function(a, b) Avail.Taken(type(b) == "number" and b or a) end) -- ((questID), or (logIndex, questID) on older clients)
+-- a quest the giver can't offer yet for a reason we know: a quest before it not handed in (the window you open to hand
+-- that one in lists none of what follows - Commander Truesong's four after Slay the Spitelash's hand-in, all four
+-- "not offered" and then "offered after all"), or a reputation you don't have. Not judged: no "not offered" for it
+function Avail.Waits(q)
+  for _, p in ipairs((ns.Engine and ns.Engine.PrereqsOf and ns.Engine.PrereqsOf(q)) or {}) do
+    if not (ns.State and ns.State.IsCompleted(p)) then return true end
+  end
+  return Avail.Needs(q) ~= nil
+end
 -- the route is refreshed only when the offers changed what is on it
 function Avail.Judge(r)
   if not r then return end
   local offered, changed = {}, false
   for _, id in ipairs(r.ids) do offered[id] = true; if Avail.Seen(id) then changed = true end end
+  -- (their window opened: they talk to you - not hostile; and offering something, they don't have "nothing for you")
+  local G = r.npc and BeelineChar and BeelineChar.avail and BeelineChar.avail.giver
+  local g = G and G[r.npc]
+  if g and (g.hostile or (g.none and #r.ids > 0)) then
+    G[r.npc] = nil; changed = true
+    if g.hostile and ns.Engine then ns.Engine.StateChanged() end
+  end
   if not r.partial and r.npc then
     for q, s in pairs(expectedFrom(r.npc)) do
-      if not offered[q] and Avail.NotOffered(q, r.npc, s.name, s) then changed = true end
+      if not offered[q] and not takenRecently(q) and not Avail.Waits(q) and Avail.NotOffered(q, r.npc, s.name, s) then changed = true end
     end
   end
   if changed and ns.Engine then ns.Engine.Refresh() end
@@ -169,6 +270,27 @@ for _, ev in ipairs({ "GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL" }) do
   end), true)
 end
 
+-- you said the giver has nothing for you (the card's button on its pick-up q): none of the route's pick-ups from that
+-- giver you could take now is offered either - one click, not one per quest walking you back to the same NPC (an
+-- Azshara tester clicked it three times at the Legashi Cauldron, twice at Korsa, twice at Elder Bramblesnap). Each is
+-- off until you level up, as one refusal is (Avail.NotOffered). -> the quests judged
+function Avail.NothingFrom(npc, q, name, step)
+  local judged = {}
+  if Avail.NotOffered(q, npc, name, step) ~= false then judged[1] = q end
+  if not npc or npc == "the quest giver" then return judged end
+  local A = store()
+  A.giver[npc] = { t = time(), lvl = level(), none = true, hostile = A.giver[npc] and A.giver[npc].hostile or nil }
+  for oq, s in pairs(expectedFrom(npc)) do
+    if oq ~= q and not takenRecently(oq) and not Avail.Waits(oq) and Avail.NotOffered(oq, npc, s.name, s) then judged[#judged + 1] = oq end
+  end
+  return judged
+end
+-- undone (the card's undo after "the giver has nothing for you"): those quests and that giver as before
+function Avail.Unjudge(qs, npc)
+  local A = store()
+  for _, q in ipairs(qs or {}) do A.no[q] = nil end
+  if npc and A.giver[npc] and A.giver[npc].none then A.giver[npc] = nil end
+end
 -- the world map's available quests on the map you're on (the "!" icons): what the game says you can pick up there
 function Avail.ScanMap(m)
   if not (m and C_QuestLine and C_QuestLine.GetAvailableQuestLines) then return 0 end

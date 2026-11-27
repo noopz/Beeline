@@ -44,6 +44,7 @@ News.lua
 Breadcrumbs.lua
 Travel.lua
 Nav\Index.lua
+Nav\MeshIndex.lua
 Nav\Nav1453.lua
 Nav\Nav1454.lua
 Nav\Nav1455.lua
@@ -51,6 +52,7 @@ Nav\Nav1456.lua
 Nav\Nav1457.lua
 Nav\Nav1458.lua
 Nav.lua
+NavMesh.lua
 Drops.lua
 FunCandidates.lua
 QuestData.lua

@@ -67,6 +67,7 @@ end
 -- taking a quest you had dropped means you want it after all
 ns.On("QUEST_ACCEPTED", function(a, b)
   local q = type(b) == "number" and b or a -- (questID) on this client, (logIndex, questID) on older ones
+  if q and ns.char and ns.char.skipQ and ns.char.skipQ[q] then ns.char.skipQ[q] = nil end -- (taken: not skipped any more)
   if q and ns.Nope(q) then
     Engine.BringBack(q)
     if ns.Why then ns.Why("abandon", questName(q) .. ": you took it again; back on your route") end
@@ -92,7 +93,14 @@ function Engine.NotOffered(q)
   if not q then q = s and s.q end
   if not q or q <= 0 or not ns.Avail then return end
   local mine = s and s.q == q and s or nil
-  ns.Avail.NotOffered(q, (mine and mine.npc) or "the quest giver", mine and mine.name, mine)
+  -- (the giver has nothing for you: their other pick-ups you could take now too - Avail.NothingFrom; undo brings back
+  -- what this click left off)
+  local npc = (mine and mine.npc) or "the quest giver"
+  local qs = ns.Avail.NothingFrom and ns.Avail.NothingFrom(npc, q, mine and mine.name, mine) or { ns.Avail.NotOffered(q, npc, mine and mine.name, mine) and q or nil }
+  if ns.char.history and #qs > 0 then
+    table.insert(ns.char.history, { kind = "notoffered", ids = {}, avail = qs, npc = npc })
+    if #ns.char.history > 50 then table.remove(ns.char.history, 1) end
+  end
   Engine.Refresh()
 end
 function Engine.Nope(q)

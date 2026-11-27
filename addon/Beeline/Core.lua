@@ -15,6 +15,7 @@ ns.DEFAULTS = {
   miniPin = true,        -- the card step's pin on the minimap (off: the game's own marker, with its above/below arrow, shows alone)
   miniPinScale = 0.5,    -- its size (small: the game's own marker and its above/below arrow show)
   pathLine = true,       -- dotted walking path on the world map and minimap
+  meshLine = false,      -- "Detailed map line": the line along the ground, round walls and cliffs, in the zones with a mesh (NavMesh.lua); off: none of it loads
   trails = true,         -- record where you walk in the capital cities (improves city paths)
   locked = false,
   rewardHint = true,     -- highlight the best quest reward

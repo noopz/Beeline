@@ -163,6 +163,13 @@ ns.On("TAXIMAP_OPENED", function()
     local want = Auto.FlightFor()
     local i = want and TakeTaxiNode and Auto.TaxiSlot(want)
     if not i then return end
+    -- the game works out a flight's hops when the map is asked for its routes (the stock map does it when you hover a
+    -- town): TakeTaxiNode without it says there's no path for a flight of more than one hop (Rut'theran Village to
+    -- Talrendis Point). No route the game knows: the map stays open for you
+    if GetNumRoutes and (GetNumRoutes(i) or 0) < 1 then
+      if ns.Why then ns.Why("auto", "no flight route to " .. want .. " the game knows from here: the map is left to you") end
+      return
+    end
     if ns.Why then ns.Why("auto", "flying to " .. want .. " (auto-fly)") end
     ns.Print("Flying to " .. (townOf(want) or want) .. ". (Auto-fly: hold Shift when you talk to the flight master to choose yourself.)")
     TakeTaxiNode(i)

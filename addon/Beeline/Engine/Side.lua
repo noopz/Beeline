@@ -66,7 +66,10 @@ function Engine.SideFits(q)
   local needs = ns.Avail and ns.Avail.Needs and ns.Avail.Needs(q)
   if needs then return false, needs end
   if ns.Avail and ns.Avail.Unavailable(q) then return false, "the giver has nothing for you" end
-  if ns.char.skipped["accept:" .. q .. ":" .. d.n .. "#1"] then return false, "you skipped it" end
+  -- (nor a giver who won't talk to you, or who you said has nothing for you at this level: Avail.GiverOff - after Furze
+  -- turned an Azshara tester down, Elder Bramblesnap's side quest was offered next, and he wouldn't talk either)
+  if ns.Avail and ns.Avail.GiverOff and ns.Avail.GiverOff(d.g[1]) then return false, d.g[1] .. " won't give you anything now" end
+  if ns.char.skipped["accept:" .. q .. ":" .. d.n .. "#1"] or (ns.char.skipQ and ns.char.skipQ[q]) then return false, "you skipped it" end
   for _, p in ipairs(d.pre or {}) do if not State.IsCompleted(p) then return false, "something comes before it" end end
   if d.any then
     local one = false

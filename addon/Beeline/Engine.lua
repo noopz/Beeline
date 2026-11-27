@@ -907,6 +907,7 @@ local function cutQuest(q, depth)
   if ex then for k = 1, #ex do if State.IsCompleted(ex[k]) or State.OnQuest(ex[k]) then return true end end end
   local a = (planIndex()).accept[q]
   if a and ns.char.skipped[key(a)] then return true end
+  if ns.char.skipQ and ns.char.skipQ[q] then return true end
   return depth < 12 and Engine.ChainCut(q, depth + 1) or false
 end
 -- (a quest the game showed you on offer - a giver listed it, or the map's "!" - is offered whatever the quest data says
@@ -1021,10 +1022,20 @@ local function statusRaw(i)
   if not s then return "done" end
   local id = key(i)
   if ns.char.manualDone[id] or ns.char.skipped[id] then return "done" end
+  -- (a pick-up you skipped on another route: the quest is skipped, whichever route shows it - Engine.Skip)
+  if s.k == "accept" and s.q and ns.char.skipQ and ns.char.skipQ[s.q] and not State.OnQuest(s.q) then return "done" end
   if s.q and ns.Nope(s.q) then return "done" end -- you said you're not doing this quest
   if s.side and s.away and s.k == "accept" then return "done" end -- a side quest offered at its giver, and you walked on (Engine.SideOffer)
   -- the game did not offer it to you (Availability.lua): off the route until you level up or it is offered
   if s.q and ns.Avail and ns.Avail.Unavailable(s.q) and not State.OnQuest(s.q) and not State.IsCompleted(s.q) then return "done" end
+  -- the NPC is unfriendly or hostile to you (Avail.ReadUnit, the game's own reaction): no pick-up from them and no hand-in
+  -- to them can be done, whatever the quest data knows of reputations (an empty table when none: one look)
+  if s.npc then
+    local av = BeelineChar and BeelineChar.avail -- (Availability's record)
+    local G = av and av.giver
+    local g = G and G[s.npc]
+    if g and g.hostile and (s.k == "accept" or s.k == "turnin") then return "done" end
+  end
   -- (one in your log that needs a profession you don't have - ore to mine, a herb to pick: its work and its hand-in
   -- are off your route until it's finished, e.g. you bought the ore)
   if s.q and (s.k == "obj" or s.k == "turnin") and ns.Avail and ns.Avail.Needs and State.OnQuest(s.q) and not State.QuestReady(s.q)
@@ -2033,8 +2044,20 @@ local function insideChanged() local inside = ns.Is(IsInInstance); if inside ~= 
 -- PROGRESS_HOLD seconds after the last one). anyStatus: the hold whatever the step's status (the refresh checks it itself)
 function Engine.Holding(anyStatus)
   local fi, why = Engine.focus, Engine.focusWhy
-  if not (fi and (why == "chosen" or (why == "progress" and GetTime() - (Engine.focusAt or 0) < Engine.PROGRESS_HOLD))) then return false end
+  -- (a progress hold counts from your last kill or loot for it, Engine.RecentProgress - not from the first, which set the
+  -- focus: farming 12 Eldarath Relics, the card went to a hand-in 90 s after the first relic, drops still coming)
+  if not (fi and (why == "chosen" or (why == "progress" and (GetTime() - (Engine.focusAt or 0) < Engine.PROGRESS_HOLD or Engine.RecentProgress(fi))))) then return false end
   return anyStatus or Engine.Status(fi) == "todo"
+end
+-- the card lets go of a step your kills held (the hold ended, the step still to do): the why log says so - the card
+-- moving off what you were farming is never silent
+function Engine.LetGoFocus()
+  local fi = Engine.focus
+  if fi and Engine.focusWhy == "progress" and ns.Why and Engine.Status(fi) == "todo" then
+    local s = steps()[fi]
+    ns.Why("reorder", "off step " .. fi .. " (" .. tostring(s and (s.name or s.text or s.k)) .. "): " .. Engine.ProgressEnded(fi))
+  end
+  Engine.focus, Engine.focusWhy = nil, nil
 end
 -- a refresh for something the game said (a new zone, logging in): its solve in the background, like the log's
 function Engine.RefreshBg() Engine.Coalesce(Engine.Refresh) end
@@ -2067,7 +2090,7 @@ function Engine.ShowPick(pick)
   if not pick or pick == Engine.current then return end
   if Engine.Status(pick) ~= "todo" and not (pick == Engine.planned and not (Engine.current and Engine.Status(Engine.current) == "todo")) then return end
   if Engine.Holding() then return end
-  Engine.focus = nil
+  Engine.LetGoFocus()
   Engine.current = pick
   if Engine.view and Engine.view == Engine.current then Engine.view = nil end
   ns.Fire("FR_STEP", Engine.Shown())
@@ -2155,9 +2178,9 @@ function Engine.RefreshInner()
     if holding and Engine.Status(fi) == "todo" then
       Engine.current = fi
     elseif Engine.RecentProgress(Engine.current) then
-      Engine.focus = nil -- (farming the plan's own step: your kills count for it - it stays, whatever circle you wander into)
+      Engine.LetGoFocus() -- (farming the plan's own step: your kills count for it - it stays, whatever circle you wander into)
     else
-      Engine.focus = nil
+      Engine.LetGoFocus()
       if Engine.bgSolve and ns.Next.PickAsync then
         -- taking in a change from the game (Engine.Coalesce): the solve runs in the background (20-40 ms of a 50 ms
         -- refresh); meanwhile the card keeps the last pick while it is still to do, else the plan's step, and moves
@@ -2246,10 +2269,15 @@ function Engine.Skip(i)
   local ids = { key(i) }
   Engine.SetSkipped(key(i))
   -- skipping a quest you don't have: its later objective / turn-in steps go too
+  local skipQ
   if s.q and (s.k == "accept" or not State.OnQuest(s.q)) and not State.IsCompleted(s.q) then
     for j = i + 1, #steps() do local t = steps()[j]; if t.q == s.q and not ns.char.skipped[key(j)] then Engine.SetSkipped(key(j)); ids[#ids + 1] = key(j) end end
+    -- (and its pick-up on every route, not this one only: a zone you pick, its own route, had it back on the card -
+    -- ns.char.skipQ, per character, until undone or you take the quest)
+    if s.k == "accept" and s.q > 0 and not State.OnQuest(s.q) then ns.char.skipQ = ns.char.skipQ or {}; ns.char.skipQ[s.q] = true; skipQ = s.q end
   end
   remember("skip", ids)
+  if skipQ then ns.char.history[#ns.char.history].skipQ = skipQ end
   Engine.view = nil
   if ns.ZoneCountsChanged then ns.ZoneCountsChanged() end -- (Where to?'s counts: a skipped pick-up cuts its chain)
   Engine.Refresh()
@@ -2258,12 +2286,18 @@ function Engine.Undo()
   local h = table.remove(ns.char.history)
   if not h then ns.Print("nothing to undo."); return end
   for _, id in ipairs(h.ids) do Engine.Untick(id) end
+  if h.skipQ and ns.char.skipQ then ns.char.skipQ[h.skipQ] = nil; Engine.StateChanged() end
   Engine.ResetFloor() -- (what you undid may be behind your place in the plan: it is yours again)
   for _, q in ipairs(h.nope or {}) do Engine.BringBack(q) end
   Engine.view = nil
+  -- (the giver had nothing for you, undone: those quests are offered as far as the route knows, that giver too)
+  if h.avail and ns.Avail and ns.Avail.Unjudge then
+    ns.Avail.Unjudge(h.avail, h.npc)
+    if ns.Why then ns.Why("avail", tostring(h.npc) .. ": \"nothing for you\" undone - " .. #h.avail .. " quest(s) back on your route") end
+  end
   if ns.ZoneCountsChanged then ns.ZoneCountsChanged() end -- (Where to?'s counts: what you undid counts again)
   Engine.Refresh()
-  ns.Print(h.kind == "skip" and "skip undone." or h.kind == "nope" and "back on your route." or "undone.")
+  ns.Print(h.kind == "skip" and "skip undone." or (h.kind == "nope" or h.kind == "notoffered") and "back on your route." or "undone.")
 end
 -- look at the previous step (view only; progress is unchanged)
 function Engine.Back()
