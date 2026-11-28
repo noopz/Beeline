@@ -18,7 +18,7 @@ The next thing to do, always on screen. It reads your quest log live, counts kil
 
 ## Pick your own zone
 
-Bored of a zone? Pick another. **Where to?** (the route window, or `/bee paths`) lists the zones you could go to now, with the XP each still has for you and the level that gets you to. Pick one and the route takes you there. If a zone's quests need an earlier part you haven't done, those steps come first when they're close by, and a chain you carry that's about to turn gray is pointed out before you leave. PLANNED NEXT takes you back to your plan, wherever you wandered.
+Bored of a zone? Pick another. **Where to?** (the signpost on the card's rail, or `/bee home`) lists the zones you could go to now, with the XP each still has for you and the level that gets you to. Pick one and the route takes you there. If a zone's quests need an earlier part you haven't done, those steps come first when they're close by, and a chain you carry that's about to turn gray is pointed out before you leave. PLANNED NEXT takes you back to your plan, wherever you wandered.
 
 ![Picking a zone](https://raw.githubusercontent.com/noopz/Beeline/main/docs/img/where-to.gif)
 

@@ -206,18 +206,33 @@ function Travel.IsTram(leg) return leg ~= nil and type(leg.dock) == "string" and
 
 -- do you have this flight point? FlightMasters.lua names each flight master's point as the flight map does
 -- ("Sentinel Hill, Westfall": the client's TaxiNodes table), so a zone with two points for your faction doesn't count
--- both as yours when you have one. Having the point by that name: yes. Having another point of the same zone by its
--- name, and not this one: no. Otherwise (no name, a client in another language) the zone's name decides.
-local taxiOf, taxiSrc
+-- both as yours when you have one. Having the point by that name: yes. Not having it while your list is in the flight
+-- map's names (one of them is ours: an English client): no - the list is the flight master's map, and only a point on
+-- it is a place a trip may fly to. Otherwise (no name, a client in another language) the zone's name decides.
+-- (3.3.0: a gnome 55 with 32 flight paths, none in Mount Hyjal, was sent to fly to Tainted Foothills - the zone's
+-- name decided, and read "Mount Hyjal" in "Stonetalon Mountains")
+local taxiOf, taxiSrc, taxiAll
 local function taxiNames()
   if taxiOf and taxiSrc == ns.FLIGHT_BY then return taxiOf end
-  taxiOf, taxiSrc = {}, ns.FLIGHT_BY
+  taxiOf, taxiSrc, taxiAll = {}, ns.FLIGHT_BY, {}
   for _, byMap in pairs(ns.FLIGHT_BY or {}) do
     for m, list in pairs(byMap) do
-      for _, f in ipairs(list) do if f[4] then taxiOf[m .. ":" .. tostring(f[3])] = f[4] end end
+      for _, f in ipairs(list) do if f[4] then taxiOf[m .. ":" .. tostring(f[3])] = f[4]; taxiAll[f[4]] = true end end
     end
   end
   return taxiOf
+end
+-- is your known list in our names? (kept per list and its size: flight paths are only ever gained, so a yes stays one)
+local namedFor, namedN, namedV
+local function listInOurNames(known)
+  if namedV and namedFor == known and taxiSrc == ns.FLIGHT_BY then return true end
+  local n = 0; for _ in pairs(known) do n = n + 1 end
+  if namedFor == known and namedN == n and taxiSrc == ns.FLIGHT_BY then return namedV end
+  taxiNames()
+  local v = false
+  for name in pairs(known) do if taxiAll[name] then v = true; break end end
+  namedFor, namedN, namedV = known, n, v
+  return v
 end
 local function knowsFP(m, npc)
   local known = (ns.State and ns.State.knownTaxi) or {}
@@ -226,7 +241,7 @@ local function knowsFP(m, npc)
   local mine = npc and taxiNames()[m .. ":" .. npc]
   if mine then
     if known[mine] then return true end
-    for _, f in ipairs((ns.FLIGHT and ns.FLIGHT[m]) or {}) do if f[4] and f[4] ~= mine and known[f[4]] then return false end end
+    if listInOurNames(known) then return false end
   end
   return ns.Engine and ns.Engine.KnowsFlightIn and ns.Engine.KnowsFlightIn(mapName(m))
 end

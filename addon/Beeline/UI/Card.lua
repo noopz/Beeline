@@ -16,6 +16,9 @@ local Card = ns.Card
 
 local PAD, DIST_W = Card.PAD, Card.DIST_W
 local f
+-- the side rail (UI/Card/Rail.lua): RAILW its width on the card's left (0: hidden, or the card collapsed), LPAD the
+-- content's left margin (Card.ApplyRail)
+local RAILW, LPAD = 0, Card.PAD
 -- the step's tool row (right-aligned under the distance): Map, and the quest icon buttons left of it
 Card.TOOL, Card.TOOL_GAP, Card.MAP_W = 16, 4, 38
 
@@ -25,6 +28,7 @@ local plain, legKind, legText = Card.Plain, Card.LegKind, Card.LegText
 
 local function build()
   PAD = Style.M.cardPad; Card.PAD = PAD -- (the skin's margin: Style.UseSkin ran before this)
+  RAILW, LPAD = 0, PAD; Card.RAILW, Card.LPAD = RAILW, LPAD -- (the rail's room: Card.ApplyRail, once the card is built)
   f = CreateFrame("Frame", "BeelineCard", UIParent)
   f:SetSize(ns.db.cardWidth, 160)
   f:SetPoint("TOPRIGHT", UIParent, "RIGHT", -60, 230) -- (Card.DEFAULT_POS; Card.ApplyPos sets the real place)
@@ -72,6 +76,13 @@ local function build()
   -- "not now": a stop the route took in from where you are (a hand-in while you're here) leaves the card until you move
   -- on; the plan's own next step comes back
   cur.notNow = Style.Button(cur, "not now", 60, 14, function() if ns.Next and ns.Next.Dismiss then ns.Next.Dismiss(ns.Engine.Shown and ns.Engine.Shown()) end end, "Skip this stop for now: the route goes back to its planned next step. It's offered again once you've moved on, or in 15 minutes.", C.dim, 10)
+  -- "Later": on a dungeon or side trip, a pick-up you can take now put off with its follow-ups until your next level or
+  -- your next start of the trip (Engine.Later; not a skip - Undo brings it back). A worded button in the tool row, left
+  -- of the quest icons; its tooltip names the trip
+  cur.later = Style.Button(cur, "Later", 40, Card.TOOL, function() ns.Engine.Later(ns.Engine.Shown and ns.Engine.Shown()) end, nil, C.sub, 10)
+  cur.later:SetWidth(math.ceil(cur.later.label:GetStringWidth()) + 12)
+  cur.later:HookScript("OnEnter", function(self) Style.ShowTip(self, Card.LaterTip()) end)
+  cur.later:Hide()
   -- a quest newer than the original game: a short tag, its meaning on hover
   cur.fq = Style.Button(cur, "Forever Quest", 84, 14, function() end, "Added by WoW Forever. If the giver has nothing for you, it drops off your route by itself.", C.forever, 10)
   cur.fq:SetWidth(cur.fq.label:GetStringWidth() + 12)
@@ -122,6 +133,8 @@ local function build()
 
   -- footer: the next zone on the left (Card.FooterText), controls on the right (UI/Card/Footer.lua)
   Card.BuildFooter(f)
+  -- the side rail on the card's left: Route, Where to?, Side trips, Log check, Options (UI/Card/Rail.lua)
+  ns.Rail.Build(f); Card.ApplyRail()
 
   f:SetScript("OnEnter", function() Card.Hover(true) end)
   f:SetScript("OnLeave", function() Card.Hover(false) end)
@@ -287,6 +300,13 @@ function Card.FillDungeon(name, id, bar, look)
   Card.SetButtons(nil)
 end
 
+-- the Later button's tooltip: the trip by its name (a dungeon's as the side trips window has it)
+function Card.LaterTip()
+  local d = BeelineData
+  local name = d and ((d.dungeon and ns.Dungeons and ns.Dungeons.DisplayName(d)) or d.dungeonName or d.title) or "this"
+  return { "Later", "Not this run: back on your next level or your next " .. name .. " trip. Its follow-ups wait with it." }
+end
+
 function Card.Fill()
   if not f then return end
   local cur = f.cur
@@ -300,7 +320,7 @@ function Card.Fill()
   cur.doneData, cur.doneLvl, cur.celebrate = nil, nil, nil -- (set again below while the plan stays finished: Card.UpdateInner)
   cur.nbars = 0
   cur.choice = nil; for _, r in ipairs(cur.optRows or {}) do r:Hide() end
-  cur.map:Hide(); cur.nope:Hide(); cur.notOffered:Hide(); cur.notNow:Hide(); cur.fq:Hide(); cur.noChain:Hide()
+  cur.map:Hide(); cur.nope:Hide(); cur.notOffered:Hide(); cur.notNow:Hide(); cur.later:Hide(); cur.fq:Hide(); cur.noChain:Hide()
   local function bar() cur.nbars = cur.nbars + 1; local b = cur.bars[cur.nbars]; if not b then b = Style.Bar(cur); cur.bars[cur.nbars] = b end; return b end
   -- (kind: the step kind whose own mark this is, for a skin with the game's marks)
   local function look(color, glyph, kind) Style.PaintMark(cur, color, glyph, kind) end
@@ -325,13 +345,14 @@ function Card.Fill()
   -- (the plan the same, when nothing on it is to do now - Engine.forNow)
   local planForNow = not forNow and i and not ns.Engine.view and ns.Engine.forNow and not (data.zoneRoute or data.dungeon or data.special or data.branch)
     and waiting(i) or false
-  -- your best few zones now, to pick the next home base from (here: the zone you stand in too)
+  -- your best few zones now, to pick the next home base from (here: the zone you stand in too; your plan's next zone
+  -- always, first: the way back to your plan)
   local function nextBases(here)
     local opts = {}
     local zc = ns.ZoneChoices and ns.ZoneChoices()
     if zc then
       local rows = {}
-      for _, r in ipairs(zc.rows or {}) do if (r.route or r.planned) and (here or not r.here) then rows[#rows + 1] = r end end
+      for _, r in ipairs(zc.rows or {}) do if (r.route or r.planned) and (here or r.best or not r.here) then rows[#rows + 1] = r end end
       table.sort(rows, Card.BaseOrder)
       for k = 1, math.min(3, #rows) do opts[#opts + 1] = rows[k] end
     end
@@ -349,7 +370,7 @@ function Card.Fill()
     for _, r in ipairs(nextBases(true)) do if r.route and (r.questsLeft or 0) > 0 then opts[#opts + 1] = r end end
     cur.titleText:SetText("Route done for now")
     cur.detail:SetText(((why == "level" and lv) and ("Its next step opens at level " .. lv .. ". ") or "Its next steps wait for earlier quests. ")
-      .. (#opts > 0 and "Pick your next home base:" or "Other zones: the house below."))
+      .. (#opts > 0 and "Pick your next home base:" or "Other zones: Where to? on the card's rail."))
     if #opts > 0 then cur.choice = { rows = opts }; fillChoice() end
     setNote("")
     Card.SetButtons(nil); return
@@ -358,9 +379,8 @@ function Card.Fill()
     look(C.good, "icon-check")
     if data.dungeon then cur.titleText:SetText((data.dungeonName or "Dungeon") .. " route done"); cur.detail:SetText("Everything for it is handed in. \"Back to plan\" carries on leveling.")
     elseif data.zoneRoute then
-      -- a zone you picked, done: "Carry on" goes where your planned route picks up; the route list has the other zones.
-      -- Only once it has stayed done a few seconds: stops are added just after a login or a route change (a hand-in
-      -- you finished, a side quest), and "done" can be true for a moment before they are
+      -- a zone you picked, done: its rows below offer where your planned route picks up (PLAN) and your best other
+      -- zones; Where to? has the rest. (zoneDoneSince: the rows are drawn again when their trips are in, FR_ZONETRIPS)
       Card.zoneDoneSince = Card.zoneDoneSince or (GetTime and GetTime()) or 0
       -- (and where to go next: your best few zones now - the zone you work from is yours to pick, the card says when it's
       -- time to pick again)
@@ -379,10 +399,9 @@ function Card.Fill()
       if forNow and later > 0 then
         wait = later .. (later == 1 and " quest here opens " or " quests here open ") .. ((byLevel and openAt) and ("at " .. openAt) or "later") .. ". "
       end
-      cur.detail:SetText(wait .. (#opts > 0 and "Pick your next home base:" or "Other zones: the house below."))
+      cur.detail:SetText(wait .. (#opts > 0 and "Pick your next home base:" or "Other zones: Where to? on the card's rail."))
       -- (clickable, so a zone can be picked from here)
       if #opts > 0 then cur.choice = { rows = opts }; fillChoice() end
-      if C_Timer and not Card.zoneDoneTick then Card.zoneDoneTick = true; C_Timer.After(3.5, function() Card.zoneDoneTick = nil; if ns.Card.Layout then ns.Card.Layout() end end) end
     elseif not i and ns.Engine.planDone and not (data.special or data.branch) then
       -- the plan finished: at 60, done (no rows - nothing left to level); below it, your next home bases
       -- (Card.UpdateInner fills it once: refreshes standing here change nothing on it)
@@ -396,7 +415,7 @@ function Card.Fill()
         local opts = {}
         for _, r in ipairs(nextBases(true)) do if r.route and (r.questsLeft or 0) > 0 then opts[#opts + 1] = r end end
         cur.titleText:SetText("Route complete")
-        cur.detail:SetText("You've finished your plan. " .. (#opts > 0 and "Pick your next home base:" or "Other zones: the house below."))
+        cur.detail:SetText("You've finished your plan. " .. (#opts > 0 and "Pick your next home base:" or "Other zones: Where to? on the card's rail."))
         if #opts > 0 then cur.choice = { rows = opts }; fillChoice() end
       end
     else cur.titleText:SetText("Route complete"); cur.detail:SetText("That's the end of the plan.") end
@@ -447,6 +466,7 @@ function Card.Fill()
   cur.nope:SetShown((s.q and s.q > 0 and not ns.Engine.view) and true or false)
   cur.notNow:SetShown((not ns.Engine.view and ns.Engine.planned and i ~= ns.Engine.planned and ns.Next and ns.Next.CanDismiss and ns.Next.CanDismiss(i)) and true or false)
   cur.notOffered:SetShown((s.k == "accept" and s.q and s.q > 0 and not ns.Engine.view and not ns.State.OnQuest(s.q)) and true or false)
+  cur.later:SetShown((s.k == "accept" and not ns.Engine.view and ns.Engine.CanLater and ns.Engine.CanLater(i)) and true or false)
   if s.k == "obj" and s.unknown then
     -- work the quest data lists none of: the game's own lines for the quest, as the quest log has them (none: one bar
     -- that says to look there)
@@ -543,24 +563,47 @@ function Card.ResetPos(quiet)
 end
 
 
+-- the rail shown or not (its tab, a collapsed card): the card's width and its content's left edge follow it. The
+-- step keeps its room: the rail's width is added to the card's
+function Card.ApplyRail()
+  local w = ns.Rail.Width()
+  if w == RAILW then return end
+  RAILW, LPAD = w, PAD + w; Card.RAILW, Card.LPAD = RAILW, LPAD
+  f:SetWidth(ns.db.cardWidth + w)
+  -- (each of them anchored again whole, as build placed it, from the new left edge)
+  local cur = f.cur
+  f.title:ClearAllPoints(); f.title:SetPoint("TOPLEFT", LPAD, -11 + Style.M.cardHeadY); f.title:SetPoint("RIGHT", f.count, "LEFT", -8, 0)
+  f.prog:ClearAllPoints(); f.prog:SetPoint("TOPLEFT", LPAD, -28); f.prog:SetPoint("TOPRIGHT", -PAD, -28)
+  cur:ClearAllPoints(); cur:SetPoint("TOPLEFT", LPAD, -40); cur:SetPoint("RIGHT", -PAD, 0)
+  cur.accent:ClearAllPoints(); cur.accent:SetPoint("TOPLEFT", f, "TOPLEFT", w, -40); cur.accent:SetPoint("BOTTOMLEFT", cur, "BOTTOMLEFT", -PAD, 0)
+  if C_Timer then C_Timer.After(0, Card.PlaceSecure) end
+end
+
 local LINK_H = 14 -- the height of the small "not now" link
 function Card.Layout()
   if not f then return end
   local cur = f.cur
+  Card.ApplyRail(); ns.Rail.Update()
   local x0 = 50
   -- give text explicit widths so wrapped heights are measured correctly
-  local inner = (f:GetWidth() or ns.db.cardWidth) - 2 * PAD
+  local inner = (f:GetWidth() or ns.db.cardWidth) - PAD - LPAD
   -- the tool row under the distance, from the right: Map, then the quest icons. The title and the detail line keep
   -- clear of it (the title runs beside it when it takes two lines).
   local toolW, tx = 0, 0
   if cur.map:IsShown() then toolW = Card.MAP_W; tx = Card.MAP_W + Card.TOOL_GAP end
-  for _, b in ipairs({ cur.notOffered, cur.nope }) do
+  for _, b in ipairs({ cur.notOffered, cur.nope, cur.later }) do
     if b:IsShown() then
       b:ClearAllPoints(); b:SetPoint("TOPRIGHT", cur, "TOPRIGHT", -tx, -18)
-      toolW = tx + Card.TOOL; tx = toolW + Card.TOOL_GAP
+      toolW = tx + (b == cur.later and b:GetWidth() or Card.TOOL); tx = toolW + Card.TOOL_GAP
     end
   end
-  cur.titleText:SetWidth(inner - x0 - math.max(DIST_W, toolW) - 4); cur.detail:SetWidth(inner - x0 - math.max(44, toolW + 6)); cur.note:SetWidth(inner - x0)
+  -- (a title that fits on its line takes it up to the distance: its line is above the tool row. One that wraps runs
+  -- beside the tool row; the detail under two lines of it is already past the row and has the width back)
+  local wide = inner - x0 - DIST_W - 4
+  cur.titleText:SetWidth(wide)
+  if (cur.titleText:GetStringWidth() or 0) > wide then cur.titleText:SetWidth(inner - x0 - math.max(DIST_W, toolW) - 4) end
+  local past = toolW > 0 and cur.titleText:GetStringHeight() + 4 >= 18 + Card.TOOL
+  cur.detail:SetWidth(inner - x0 - math.max(44, past and 0 or toolW + 6)); cur.note:SetWidth(inner - x0)
   local y = cur.titleText:GetStringHeight() + 4 + ((cur.detail:GetText() or "") ~= "" and cur.detail:GetStringHeight() or 0)
   y = math.max(y, 38)
   for k = 1, cur.nbars or 0 do
@@ -611,7 +654,7 @@ function Card.Layout()
     for _, r in ipairs(f.rows) do r:Hide() end
     f.eta:Hide(); f.ret:Hide(); f.leave:Hide(); f.drop:Hide(); f.dropWanted = nil
     for _, b in pairs(f.btn) do b:Hide() end
-    -- (and every row under the card: the reminders, offers, the house and Undo)
+    -- (and every row under the card: the reminders, offers and Undo; the side rail and its tab: Rail.Update)
     for _, row in pairs(Card.ExtraRows()) do row:Hide() end
     f.ctl:ClearAllPoints(); f.ctl:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 4, -top + 6)
     f.btn.min:Show(); f.btn.min:ClearAllPoints(); f.btn.min:SetPoint("RIGHT", f.ctl, "RIGHT")
@@ -647,7 +690,7 @@ function Card.Layout()
       r.index, r.base, r.cnt = nil, nil, nil
       r.dot:SetVertexColor(kind.color[1], kind.color[2], kind.color[3], 0.9)
       r.text:SetText((legText(l, kind))); r.text:SetAlpha(1 - (k - 1) * 0.15)
-      r:ClearAllPoints(); r:SetPoint("TOPLEFT", f, "TOPLEFT", PAD - 4, -top); r:SetPoint("RIGHT", -PAD, 0); r:Show()
+      r:ClearAllPoints(); r:SetPoint("TOPLEFT", f, "TOPLEFT", LPAD - 4, -top); r:SetPoint("RIGHT", -PAD, 0); r:Show()
       top = top + 20
     elseif i then
       local s = steps()[i]; local kind = Style.Kind(s)
@@ -658,7 +701,7 @@ function Card.Layout()
       local cnt = o and o.need and o.need > 0 and string.format("  |cff8a93a6%d/%d|r", o.have or 0, o.need) or ""
       r.base, r.cnt = (Card.Describe(s)), cnt
       r.text:SetText(r.base .. cnt); r.text:SetAlpha(1 - (k - 1) * 0.2)
-      r:ClearAllPoints(); r:SetPoint("TOPLEFT", f, "TOPLEFT", PAD - 4, -top); r:SetPoint("RIGHT", -PAD, 0); r:Show()
+      r:ClearAllPoints(); r:SetPoint("TOPLEFT", f, "TOPLEFT", LPAD - 4, -top); r:SetPoint("RIGHT", -PAD, 0); r:Show()
       top = top + 20
     else r:Hide() end
   end
@@ -684,33 +727,22 @@ function Card.UpdateProgress()
   end
   -- progress through this zone (a fresh plan doesn't reset it to nothing; the whole plan is in /bee list)
   local done, total, zone = ns.Engine.LegProgress()
-  -- (who picked this zone: you - your home base - or your plan)
   local d = BeelineData
-  local who = d and not d.dungeon and not d.special and "Base: " or "" -- (your plan's zone is your home base too)
-  f.count:SetText(total > 0 and string.format("%s%d/%d", zone and (who .. Style.ShortZone(zone) .. "  ") or "", done, total) or "")
+  if not (d and d.dungeon) then zone = nil end -- (the header line names it: "Leveling · Azshara"; a trip's names the trip)
+  f.count:SetText(total > 0 and string.format("%s%d/%d", zone and (Style.ShortZone(zone) .. "  ") or "", done, total) or "")
   f.progFill:SetWidth(math.max(0.001, (f.prog:GetWidth() or 0) * (total > 0 and done / total or 0)))
 end
 
 
+-- the top line: the route you are on (Rail.HeaderText: "Leveling · Azshara", on a side trip the trip's name)
 function Card.Header()
   local i = ns.Engine.Shown()
   local sec = i and section(i)
-  local dname = BeelineData and BeelineData.dungeon and (BeelineData.dungeonName or BeelineData.title)
-  -- (the zone once: a title that names it - "Out in Redridge Mountains" - with its short name, and no zone after it)
-  local t, z = sec and sec.title, sec and sec.zone
+  local z = sec and sec.zone
   -- (a stop in another zone than its stretch - a hand-in pulled in on the way: that zone, not the stretch's)
   local st = i and steps()[i]
-  if st and st.zone and z and st.zone ~= z and not dname then t, z = "On the way: " .. st.zone, st.zone end
-  local named = t and z and t:lower():find(z:lower(), 1, true)
-  if named then
-    local a2 = t:lower():find(z:lower(), 1, true)
-    -- (a hub's "Zone: NPC, NPC": the progress on the right names the zone, so just the people)
-    if a2 == 1 and t:sub(#z + 1, #z + 1) == ":" then t = t:sub(#z + 2):gsub("^%s+", "")
-    else t = t:sub(1, a2 - 1) .. Style.ShortZone(z) .. t:sub(a2 + #z) end
-  end
-  -- (a side trip's section that only repeats its name - "VOIDWALKER (WARLOCK 10)  Special: Voidwalker (warlock 10)")
-  if dname and t and t:lower():find(dname:lower(), 1, true) then t = "" end
-  f.title:SetText((dname and ("|cffff7a6b" .. dname:upper() .. "|r  ") or "") .. (sec and (t:upper() .. (not dname and not named and z and z ~= sec.title and ("  |cff8a93a6" .. Style.ShortZone(z) .. "|r") or "")) or (BeelineData and BeelineData.title or "Beeline")))
+  if st and st.zone and z and st.zone ~= z then z = st.zone end
+  f.title:SetText(ns.Rail.HeaderText(z))
 end
 -- A count moved ("Gnoll Paws: 3/8", State.lua FR_PROGRESS): only the bars and counts on the card change - its text,
 -- height and buttons stay (a full redraw on every kill costs ms; this is a few bars).
@@ -789,7 +821,7 @@ ns.On("FR_SETTINGS", function(key)
   if not f or Card.OTHERS_KEYS[key] then return end
   local i = ns.Engine.Shown and ns.Engine.Shown()
   if i and BeelineData then pcall(Card.SetButtons, BeelineData.steps[i]) end
-  f:SetWidth(ns.db.cardWidth); Card.Update()
+  f:SetWidth(ns.db.cardWidth + RAILW); Card.Update()
   C_Timer.After(0, function() if f then Card.ApplyPos(); Card.PlaceSecure() end end)
 end)
 -- leg = the arrow points at a waypoint on the way (the flight master, the pier), not the step: say which, so

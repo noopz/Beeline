@@ -53,7 +53,12 @@ function Engine.TravelPlan(s)
   if not (s and s.k == "fly" and s.to and not s.boat and ns.FLIGHT and HBD) then return nil end
   local destName = s.dest or s.text
   if not destName then return nil end
-  local fm = ns.FLIGHT[s.to] and ns.FLIGHT[s.to][1]
+  -- (a flight point of that zone you know, by its flight master - Travel.KnowsFlightPoint: of a zone with two, only
+  -- the one you took; without one known, the zone's first for where a flight would land)
+  local knows = function(m, f) return ns.Travel.KnowsFlightPoint(m, f[3]) and true or false end
+  local fm, fmKnown
+  for _, f in ipairs(ns.FLIGHT[s.to] or {}) do if knows(s.to, f) then fm, fmKnown = f, true; break end end
+  fm = fm or (ns.FLIGHT[s.to] and ns.FLIGHT[s.to][1])
   local stop = firstStop(s)
   local tx, ty = (stop and stop.x) or (fm and fm[1]) or 0.5, (stop and stop.y) or (fm and fm[2]) or 0.5
   local wx, wy, inst = HBD:GetWorldCoordinatesFromZone(tx, ty, s.to)
@@ -70,7 +75,7 @@ function Engine.TravelPlan(s)
     if fx and hx and finst == hinst then local dd = d(hx, hy, fx, fy); if not startYd or dd < startYd then startYd = dd end end
   end
   local plan = { m = s.to, x = tx, y = ty, stop = stop }
-  if Engine.KnowsFlightIn(destName) then
+  if fmKnown then
     -- you can fly right there: only worth riding if the first stop is closer than the flight would make it
     if not (rideYd and fm) then return nil end
     local lx, ly = HBD:GetWorldCoordinatesFromZone(fm[1], fm[2], s.to)
@@ -82,11 +87,15 @@ function Engine.TravelPlan(s)
   local best
   for m, list in pairs(ns.FLIGHT) do
     local info = C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(m)
-    if info and info.name and m ~= s.to and Engine.KnowsFlightIn(info.name) then
-      local fx, fy, finst = HBD:GetWorldCoordinatesFromZone(list[1][1], list[1][2], m)
-      if fx and finst == inst then
-        local dd = d(fx, fy, wx, wy)
-        if not best or dd < best.d then best = { d = dd, m = m, name = info.name } end
+    if info and info.name and m ~= s.to then
+      for _, f in ipairs(list) do
+        if knows(m, f) then
+          local fx, fy, finst = HBD:GetWorldCoordinatesFromZone(f[1], f[2], m)
+          if fx and finst == inst then
+            local dd = d(fx, fy, wx, wy)
+            if not best or dd < best.d then best = { d = dd, m = m, name = info.name } end
+          end
+        end
       end
     end
   end

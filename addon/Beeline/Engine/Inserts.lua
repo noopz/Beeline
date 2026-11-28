@@ -277,15 +277,20 @@ function Engine.MergeSideTrips()
   end
   -- flight paths you do not have, close to the trip (a small detour now saves trips later): only where the trip has
   -- you in the flight master's own zone, on a stretch you cover on the ground
-  local have = {}; for _, s in ipairs(steps()) do if s.k == "fp" and s.m then have[s.m] = true end end
+  -- (each flight point of a zone on its own: of Mount Hyjal's two, the one by the trip - Tainted Foothills by Ketharas -
+  -- whether you have the other or not; a route's "fp" step without a flight master stands for its zone's)
+  local have = {}; for _, s in ipairs(steps()) do if s.k == "fp" and s.m then have[s.npc and (s.m .. ":" .. s.npc) or s.m] = true end end
   for m, list in pairs(ns.FLIGHT or {}) do
     ns.MaybeYield()
     local info = C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(m)
     local zn = info and info.name
-    if zn and not have[m] and not Engine.KnowsFlightIn(zn) then
-      local f = list[1]
-      local at = Engine.InsertStop({ k = "fp", npc = f[3], m = m, x = f[1], y = f[2], zone = zn, r = 8, inserted = true, note = "A flight path you do not have yet - saves trips later." }, px, py, pinst, { maxCost = Engine.FP_DETOUR_YARDS, onMap = m, why = "a flight path close to this trip" })
-      if at then added = added + 1 end
+    if zn and not have[m] then
+      for _, f in ipairs(list) do
+        if not have[m .. ":" .. tostring(f[3])] and not ns.Travel.KnowsFlightPoint(m, f[3]) then
+          local at = Engine.InsertStop({ k = "fp", npc = f[3], m = m, x = f[1], y = f[2], zone = zn, r = 8, inserted = true, note = "A flight path you do not have yet - saves trips later." }, px, py, pinst, { maxCost = Engine.FP_DETOUR_YARDS, onMap = m, why = "a flight path close to this trip" })
+          if at then added = added + 1 end
+        end
+      end
     end
   end
   if added > 0 then ns.Print(added .. " stop" .. (added == 1 and "" or "s") .. " added on the way: other side trips and flight paths you do not have (see the list).") end

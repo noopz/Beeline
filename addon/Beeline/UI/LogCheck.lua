@@ -322,7 +322,8 @@ local function row(k)
   if rows[k] then return rows[k] end
   local r = CreateFrame("Frame", nil, f.content); r:SetSize(W - 2 * PAD - 10, ROW)
   r.edge = Style.RowEdge(r, 3, 0, 4)
-  r.title = Style.Text(r, 11, C.text); r.title:SetPoint("TOPLEFT", 10, -3); r.title:SetWordWrap(false); r.title:SetWidth(W - 2 * PAD - BTNS - 14)
+  r.title = Style.Text(r, 11, C.text); r.title:SetPoint("TOPLEFT", 10, -3); r.title:SetWordWrap(true); r.title:SetJustifyH("LEFT"); r.title:SetWidth(W - 2 * PAD - BTNS - 14)
+  if r.title.SetMaxLines then r.title:SetMaxLines(2) end -- (a long title and zone: two lines, "..." past the second)
   r.why = Style.Text(r, 10, C.sub); r.why:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -2); r.why:SetWordWrap(true); r.why:SetJustifyH("LEFT"); r.why:SetWidth(W - 2 * PAD - BTNS - 14)
   if r.why.SetMaxLines then r.why:SetMaxLines(2) end
   r.btn = Style.Button(r, "Abandon", 80, 18, function(self)

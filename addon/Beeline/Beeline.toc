@@ -72,11 +72,11 @@ UI\Explain.lua
 UI\Card\Text.lua
 UI\Card\Secure.lua
 UI\Card\Footer.lua
+UI\Card\Rail.lua
 UI\Card.lua
 UI\Arrow.lua
 UI\GameNav.lua
 UI\Pins.lua
-UI\Zones.lua
 UI\Window.lua
 UI\List.lua
 UI\Paths.lua

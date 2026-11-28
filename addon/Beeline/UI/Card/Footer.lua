@@ -1,5 +1,5 @@
--- The card's footer: the rows under the step (FOOT), the hover controls, the house and Undo at the bottom line's right,
--- the drop link, Back / Finish / Leave, and what feeds the rows (the companion's ready signal and change note, special
+-- The card's footer: the rows under the step (FOOT), the hover controls, Undo at the bottom line's right, the drop
+-- link (with the side rail hidden), Back / Finish / Leave, and what feeds the rows (the companion's ready signal and change note, special
 -- side trips, a hand-in ready nearby).
 local _, ns = ...
 local pcall = ns.PCall or pcall -- (a job never pauses under it: Core.lua)
@@ -25,7 +25,8 @@ end
 -- the footer's frames, made with the card (build, UI/Card.lua)
 function Card.BuildFooter(frame)
   f, PAD = frame, Card.PAD
-  -- footer: the next zone on the left (Card.FooterText), the house at the right, controls left of it (shown on hover)
+  -- footer: the next zone on the left (Card.FooterText), Undo at the right, controls left of it (shown on hover). The
+  -- places to go (the route, Where to?, side trips, the log check, options) are on the side rail (UI/Card/Rail.lua)
   f.eta = Style.Text(f, 10, C.dim); f.eta:SetWordWrap(false)
   f.ctl = CreateFrame("Frame", nil, f); f.ctl:SetSize(184, 20); f.ctl:SetAlpha(0)
   f.ctl.OnChildEnter = function() Card.Hover(true) end
@@ -34,39 +35,26 @@ function Card.BuildFooter(frame)
     fwd = Style.IconButton(f.ctl, "btn-next", 20, function() ns.Engine.Forward() end, "Next step"),
     done = Style.IconButton(f.ctl, "icon-check", 20, function() ns.Engine.MarkDone() end, "Mark this step done"),
     skip = Style.IconButton(f.ctl, "btn-skip", 20, function() ns.Engine.Skip() end, "Skip this step (a skipped quest's later steps go too)"),
-    list = Style.IconButton(f.ctl, "btn-list", 20, function() ns.Fire("FR_TOGGLE_LIST") end, "The whole route  (/bee list)"),
-    min = Style.IconButton(f.ctl, "btn-min", 20, function() ns.db.collapsed = not ns.db.collapsed; Card.Update(); if ns.Zones then ns.Zones.Update() end end, "Collapse / expand"),
-    opt = Style.IconButton(f.ctl, "btn-gear", 20, function() ns.Fire("FR_OPEN_OPTIONS") end, "Options"),
+    min = Style.IconButton(f.ctl, "btn-min", 20, function() ns.db.collapsed = not ns.db.collapsed; Card.Update() end, "Collapse / expand"),
     -- "this looks wrong": the moment kept for a bug report (Moments.lua), the flag turning green a moment to say so
     flag = Style.IconButton(f.ctl, "btn-flag", 20, function(self) Card.FlagMoment(self) end, Card.FLAG_TIP),
   }
   for _, b in pairs(f.btn) do b:HookScript("OnLeave", function() Card.Hover(false) end) end
-  -- the house: at the bottom line's right, always there (not in the hover bar). A dungeon or side trip: back to your
-  -- leveling path; finishing your quests at 60: back to the level 60 card; a zone you picked that is done: your planned
-  -- route's next zone (carryOn, Card.LayoutFooter); else the Home base window
-  f.home = Style.IconButton(f, "btn-home", 20, function(self)
-    local d = BeelineData
-    if ns.Engine.Finishing() then ns.Engine.SetFinishing(false)
-    elseif d and d.dungeon then ns.LeaveDungeonRoute()
-    elseif self.carryOn and ns.Paths and ns.Paths.Pick then ns.Paths.Pick(self.carryOn)
-    elseif ns.Paths and ns.Paths.Show then ns.Paths.Show("zones") end
-  end, { "Home base" })
-  -- Undo: left of the house for Card.UNDO_SECS after something you can undo (Card.UndoShown); /bee undo any time
+  -- Undo: at the bottom line's right for Card.UNDO_SECS after something you can undo (Card.UndoShown); /bee undo any time
   f.undo = Style.IconButton(f, "btn-undo", 20, function() ns.Engine.Undo() end, "Undo the last skip / done")
-  for _, b in ipairs({ f.home, f.undo }) do
-    b:HookScript("OnEnter", function() Card.Hover(true) end); b:HookScript("OnLeave", function() Card.Hover(false) end); b:Hide()
-  end
+  f.undo:HookScript("OnEnter", function() Card.Hover(true) end); f.undo:HookScript("OnLeave", function() Card.Hover(false) end); f.undo:Hide()
   f.ret = Style.Button(f, "Back to current step", 140, 18, function() ns.Engine.view = nil; ns.Fire("FR_STEP", ns.Engine.Shown()) end)
   -- level 60: the route is done (Engine.Capped). This finishes the quests you hold - their objectives and hand-ins, nothing
-  -- new - and a second click (or the house) goes back to the level 60 card (Engine.SetFinishing)
+  -- new - and a second click ("Back to level 60") goes back to the level 60 card (Engine.SetFinishing)
   f.finish = Style.Button(f, "Finish my quests", 130, 18, function() ns.Engine.SetFinishing(not ns.Engine.Finishing()) end,
     "Finish the quests in your log: their objectives and hand-ins, nothing new picked up. Click again to stop.")
   f.finish:Hide()
-  -- on a dungeon route or side trip: the way back to your plan, always on the card (the hover bar's house is hard to find)
+  -- on a dungeon route or side trip: the way back to your plan, always on the card (the side rail's top button too)
   f.leave = Style.Button(f, "Back to plan", 100, 18, function() ns.LeaveDungeonRoute() end,
     "Leave this dungeon route or side trip and carry on with your plan. Progress here is kept.")
   f.leave:Hide()
-  -- quests in your log you won't do (not on the route, or gray by then): a nudge that opens the log check
+  -- quests in your log you won't do (not on the route, or gray by then): a nudge that opens the log check (with the side
+  -- rail hidden: the rail's Log check has the count)
   f.drop = Style.Button(f, "", 90, 14, function() ns.Fire("FR_TOGGLE_LOGCHECK") end, "Quests in your log no route of yours uses. Click to look them over.", C.warn, 10)
   f.drop:Hide()
   -- the rows under the step (laid out by Card.Layout from FOOT): a line of text, at the right an optional button
@@ -87,9 +75,9 @@ function Card.BuildFooter(frame)
     f[key] = r
     return r
   end
-  -- options that just opened up (a level-up brought new zones): one line, the house (the Home base window), dismiss
+  -- options that just opened up (a level-up brought new zones): one line, Where to? (the Home base view), dismiss
   footRow("offer", C.gold, { nil, 18, function() if ns.Paths and ns.Paths.Show then ns.Paths.Show("zones") end end,
-    { "Home base", "The zones you could go to now. Nothing changes unless you pick one." }, icon = "btn-home" },
+    { "Where to?", "Opens the zones you could go to now. Nothing changes unless you pick one." }, icon = "icon-where" },
     { function() ns.Offers.Dismiss(f.offer.base or false) end, "Hide this until your next level" })
   -- a newer plan from the companion: reload to load it (Card.SaveNudge)
   footRow("save", C.info, { "Reload", 64, function() Card.Save() end, "Reload (a few seconds) to load the new route." },
@@ -158,23 +146,23 @@ local FOOT = {
     get = function() return not ns.Engine.view and ns.db.cardItemQuests ~= false and ns.ItemQuests and ns.ItemQuests.Current() end,
     set = function(row, iq)
       -- (an explicit width, so the wrapped height is measured right: the "x" takes the last 22)
-      row.text:SetWidth((f:GetWidth() or ns.db.cardWidth) - 2 * PAD - 22)
+      row.text:SetWidth((f:GetWidth() or ns.db.cardWidth) - PAD - Card.LPAD - 22)
       row.text:SetText(ns.ItemQuests.Text(iq, not f.cur.offerItem))
       local h = math.max(20, math.ceil((row.text:GetStringHeight() or 0) + 4))
       row:SetHeight(h)
       return h + 2
     end },
 }
--- the rows hidden on a collapsed card: the footer rows above, the house and Undo (no bottom line to sit on)
+-- the rows hidden on a collapsed card: the footer rows above and Undo (no bottom line to sit on)
 local extraRows
 function Card.ExtraRows()
   if not extraRows then
-    extraRows = { home = f.home, undo = f.undo }
+    extraRows = { undo = f.undo }
     for _, sp in ipairs(FOOT) do if sp.extra then extraRows[sp.key] = f[sp.key] end end
   end
   return extraRows
 end
--- the "N won't do" link: at the right of the footer (left of the house), or - while you hover the card and its controls
+-- the "N off-route" link (the side rail hidden): at the right of the footer (left of Undo), or - while you hover the card and its controls
 -- take that spot - at the left, where the footer line fades out. Never hidden on hover: the mouse on its way to click it
 -- would make it vanish
 function Card.PlaceDrop(hover)
@@ -233,8 +221,8 @@ function Card.UndoShown()
   return #h > 0 and undoUntil ~= nil and now < undoUntil
 end
 
--- the footer's part of Card.Layout, from top: the rows, the drop link, Back / Finish / Leave, the footer line, the house
--- and Undo at its right, and the controls left of them
+-- the footer's part of Card.Layout, from top: the rows, the drop link, Back / Finish / Leave, the footer line, Undo at
+-- its right, and the controls left of it
 function Card.LayoutFooter(top)
   local cur = f.cur
   for _, sp in ipairs(FOOT) do
@@ -242,13 +230,14 @@ function Card.LayoutFooter(top)
     row:SetShown(v and true or false)
     if v then
       local h = sp.set(row, v) or 22
-      row:ClearAllPoints(); row:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -top); row:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+      row:ClearAllPoints(); row:SetPoint("TOPLEFT", f, "TOPLEFT", Card.LPAD, -top); row:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
       top = top + h
     end
   end
   local nd = ns.LogCheck and ns.LogCheck.dropCount or 0
-  -- (a small link at the right of the footer, not a row of its own: saves room)
-  f.dropWanted = nd > 0 and not ns.Engine.view
+  -- (a small link at the right of the footer, not a row of its own: saves room. With the side rail shown, its Log check
+  -- has the count)
+  f.dropWanted = nd > 0 and not ns.Engine.view and Card.RAILW == 0
   f.drop:SetShown(f.dropWanted)
   if f.dropWanted then
     f.dropText, f.dropCount = string.format("%d off-route", nd), nd
@@ -257,49 +246,30 @@ function Card.LayoutFooter(top)
   end
   local viewing = ns.Engine.view ~= nil
   f.ret:SetShown(viewing)
-  if viewing then f.ret:ClearAllPoints(); f.ret:SetPoint("TOPLEFT", PAD, -top); top = top + 24 end
+  if viewing then f.ret:ClearAllPoints(); f.ret:SetPoint("TOPLEFT", Card.LPAD, -top); top = top + 24 end
   -- level 60: "Finish my quests" on the celebration, "Stop finishing quests" while you finish them (Engine.SetFinishing)
   local fin = ns.Engine.Finishing()
   local showFin = not viewing and (cur.celebrate or fin) and true or false
   f.finish:SetShown(showFin)
   if showFin then
     f.finish.label:SetText(fin and "Back to level 60" or "Finish my quests")
-    f.finish:ClearAllPoints(); f.finish:SetPoint("TOPLEFT", PAD, -top); top = top + 24
+    f.finish:ClearAllPoints(); f.finish:SetPoint("TOPLEFT", Card.LPAD, -top); top = top + 24
   end
   local trip = BeelineData and BeelineData.dungeon and not viewing and not showFin
   f.leave:SetShown(trip and true or false)
-  if trip then f.leave:ClearAllPoints(); f.leave:SetPoint("TOPLEFT", PAD, -top); top = top + 24 end
+  if trip then f.leave:ClearAllPoints(); f.leave:SetPoint("TOPLEFT", Card.LPAD, -top); top = top + 24 end
   f.dropY = -top - 2
-  local d = BeelineData
-  -- the house: a dungeon or side trip, a zone you picked, your plan (its zone is your home base too)
-  local home = d and (d.dungeon or d.zoneRoute or not d.special) and true or false
-  f.home:SetShown(home)
-  f.home.carryOn = nil
-  if home then
-    local line = ns.Engine.Finishing() and "Click: back to the level 60 card. Stops finishing the quests you hold."
-      or d.dungeon and "Click: back to your plan. Progress on this side trip is kept."
-    -- a zone you picked, done for a few seconds (Card.Fill): carry on where your planned route picks up
-    if not line and d.zoneRoute and Card.zoneDoneSince and ns.ZoneChoices then -- (at once: not a tooltip changing under your cursor seconds later)
-      local best = ns.ZoneChoices().best
-      if best then f.home.carryOn = best; line = "Click: back to your plan, in " .. Style.ShortZone(best.zone) .. ". Progress here is kept." end
-    end
-    f.home.tip[2] = line or "Click: pick another zone to work from. Side trips are in the same window. Progress here is kept." -- (the table kept: no new one per layout)
-    f.home:ClearAllPoints(); f.home:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 4, -top + 1)
-  end
   local undo = Card.UndoShown()
   f.undo:SetShown(undo)
-  if undo then
-    f.undo:ClearAllPoints()
-    if home then f.undo:SetPoint("RIGHT", f.home, "LEFT", -3, 0) else f.undo:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 4, -top + 1) end
-  end
-  -- (the line, the drop link and the hover bar end left of them)
-  local fixedW = (home and 23 or 0) + (undo and 23 or 0)
-  f.rightEdge = (undo and f.undo) or (home and f.home) or nil
-  f.eta:Show(); f.eta:ClearAllPoints(); f.eta:SetPoint("TOPLEFT", PAD, -top - 4); f.eta:SetPoint("RIGHT", f, "RIGHT", -PAD - fixedW - (f.dropWanted and f.drop:GetWidth() + 4 or 0), 0)
-  Card.PlaceDrop(Card.hovering or f.ctl:GetAlpha() > 0.5) -- (hovering: at the left, the controls have the right; after the house is set)
+  if undo then f.undo:ClearAllPoints(); f.undo:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 4, -top + 1) end
+  -- (the line, the drop link and the hover bar end left of it)
+  local fixedW = undo and 23 or 0
+  f.rightEdge = undo and f.undo or nil
+  f.eta:Show(); f.eta:ClearAllPoints(); f.eta:SetPoint("TOPLEFT", Card.LPAD, -top - 4); f.eta:SetPoint("RIGHT", f, "RIGHT", -PAD - fixedW - (f.dropWanted and f.drop:GetWidth() + 4 or 0), 0)
+  Card.PlaceDrop(Card.hovering or f.ctl:GetAlpha() > 0.5) -- (hovering: at the left, the controls have the right; after Undo is set)
   f.ctl:ClearAllPoints(); f.ctl:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 4 - fixedW, -top + 1)
   local x = 0
-  for _, name in ipairs({ "opt", "min", "list", "skip", "done", "fwd", "back", "flag" }) do
+  for _, name in ipairs({ "min", "skip", "done", "fwd", "back", "flag" }) do
     local b = f.btn[name]
     local show = true
     if name == "fwd" then show = viewing end
@@ -320,7 +290,8 @@ function Card.LayoutFooter(top)
       Card.lastRow[name] = sig
     end
   end
-  f:SetHeight(top + 26)
+  -- (at least as tall as the side rail's buttons: a short card - a hand-in, one step under it - grows to fit them)
+  f:SetHeight(math.max(top + 26, ns.Rail.MinHeight()))
   C_Timer.After(0, Card.PlaceSecure)
 end
 

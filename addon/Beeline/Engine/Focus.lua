@@ -106,7 +106,8 @@ function Engine.NotYet(i)
   if st == "done" then return nil end
   if st == "wait" then
     -- (training: the lowest level it names - Engine.TrainFrom; no level at all is nil, never "at level 0" on the pin)
-    local lv = math.max(s.minLevel or s.until_ or 0, Engine.TooHigh(s) or 0, Engine.TrainFrom(i) or 0)
+    local tl = Engine.TripLaterOf and Engine.TripLaterOf(s) -- (a trip's pick-up put off: the level it comes back at)
+    local lv = math.max(s.minLevel or s.until_ or 0, Engine.TooHigh(s) or 0, Engine.TrainFrom(i) or 0, tl and tl.at or 0)
     if lv > 0 then return "level", nil, lv end
     -- (a pick-up whose earlier quest is not handed in: falls through to "handin" below with that hand-in's step)
     if not (s.q and not State.PrereqsMet(s.q)) then return "level" end

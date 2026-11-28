@@ -131,6 +131,60 @@ function Dungeon.State(id)
   return out
 end
 
+-- Later on a trip: what trip r (a dungeon route or a side trip; default the one you are on) leaves for later at your
+-- level (Engine.TripLater: can't take yet, red to you, put off by you), grouped by the level each comes back at, a chain
+-- in one entry - its first quest put off, with the follow-ups that wait with it:
+--   { { at = 55, quests = { { q, name, level, minLevel, at, why, reason = "opens at 55", more = 3, follow = { names } } } }, ... }
+-- reason: "opens at 55" (its required level), "level 60: 5 levels above you" (red), "you put it off" (until your next
+-- level or next start of the trip). Lowest level first; nil when r is no trip, {} with nothing put off.
+function Dungeon.LaterReason(e, L)
+  L = L or (UnitLevel and UnitLevel("player")) or 1
+  local parts = {}
+  if e.minLevel and L < e.minLevel then parts[#parts + 1] = "opens at " .. e.minLevel end
+  if e.level and e.level >= ns.Engine.RedAt(L) then
+    local up = e.level - L
+    parts[#parts + 1] = "level " .. e.level .. ": " .. up .. " level" .. (up == 1 and "" or "s") .. " above you"
+  end
+  if #parts == 0 and e.why == "manual" then parts[1] = "you put it off" end
+  if #parts == 0 and e.why == "item" then parts[1] = "needs the " .. (e.itemName or "item that starts it") .. " in your bags" end
+  return table.concat(parts, "; ")
+end
+-- "The Fate of the Kingdom", or "Stormwind Rendezvous -> 3 more"
+function Dungeon.LaterText(e)
+  local n = e.name or ("Quest " .. tostring(e.q))
+  if (e.more or 0) > 0 then n = n .. " -> " .. e.more .. " more" end
+  return n
+end
+function Dungeon.Later(r, L)
+  r = r or BeelineData
+  L = L or (UnitLevel and UnitLevel("player")) or 1
+  local set = ns.Engine.TripLater and ns.Engine.TripLater(r, L)
+  if not set then return nil end
+  local roots, order = {}, {}
+  for q, e in pairs(set) do
+    if e.root == q then
+      local x = { q = q, name = e.name, level = e.level, minLevel = e.minLevel, at = e.at, why = e.why, itemName = e.itemName, step = e.step, more = 0, follow = {} }
+      x.reason = Dungeon.LaterReason(x, L)
+      roots[q] = x; order[#order + 1] = x
+    end
+  end
+  for q, e in pairs(set) do
+    local x = e.root ~= q and roots[e.root]
+    if x then x.more = x.more + 1; x.follow[#x.follow + 1] = e.name or ("Quest " .. q) end
+  end
+  table.sort(order, function(a, b) if a.at ~= b.at then return a.at < b.at end return (a.step or 0) < (b.step or 0) end)
+  local out, by = {}, {}
+  for _, x in ipairs(order) do
+    table.sort(x.follow)
+    -- (one waiting for an item, not a level: a group of its own, item = true)
+    local gk = x.why == "item" and "item" or x.at
+    local g = by[gk]
+    if not g then g = { at = x.at, item = x.why == "item" or nil, quests = {} }; by[gk] = g; out[#out + 1] = g end
+    g.quests[#g.quests + 1] = x
+  end
+  return out
+end
+
 -- walking in or out: FR_DUNGEON(name, id) - nil, nil on the way out. Both come with a loading screen, so the game's
 -- zone events cover it; a slow look every few seconds is there for a client that names the instance late.
 local last

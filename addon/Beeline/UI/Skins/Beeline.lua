@@ -153,8 +153,8 @@ end
 -- one of our glyphs on a texture; Style.GlyphTag: the same inline in text
 function S.Glyph(tex, name) tex:SetTexture(MEDIA .. name) end
 function S.GlyphTag(name, size) return "|T" .. MEDIA .. name .. ":" .. size .. "|t" end
--- a tab rail's backing (alpha a)
-function S.RailBg(rail, a)
+-- a tab rail's backing (alpha a; flat: no edge line, where a skin draws one)
+function S.RailBg(rail, a, flat)
   local t = Style.Fill(rail, "BACKGROUND"); t:SetAllPoints()
   paint(t, C.black, a)
   return t

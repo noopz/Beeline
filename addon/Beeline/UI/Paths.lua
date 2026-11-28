@@ -4,7 +4,7 @@
 --   other full plans fold under them.
 -- The list scrolls in a window that keeps its size. Paths.Draw builds one state (Paths.State) and lays it out; each
 -- kind of row has one paint function for its looks (selected, hover, kind), so they never stack oddly. Opened from the
--- card's house, /bee home (or /bee paths), FR_TOGGLE_PATHS.
+-- card's side rail (Where to?) and its level-up line, /bee home (or /bee paths), FR_TOGGLE_PATHS.
 local _, ns = ...
 local Style = ns.Style
 local C = Style.C
@@ -209,7 +209,7 @@ function Paths.Request(zone, route)
   if zr then
     ns.Engine.Switch(function() ns.EnterZoneRoute(zr.id); ns.Fire("FR_ROUTE_CHANGED") end)
     if ns.Why then ns.Why("path", "home base: " .. zone .. " - on its ready-made route now, with the quests you carry there; your next plan starts there") end
-    ns.Print("Home base: " .. zone .. ". The house on the card takes you back to your plan.")
+    ns.Print("Home base: " .. zone .. ". Your plan's next zone is first in Where to? (on the card's side rail): it takes you back to your plan.")
   else
     ns.Print(zone and ("Asked for a path starting in " .. zone .. ". /reload to send it to the planner, then /reload once more to get it.") or "Cleared your zone request.")
   end
@@ -380,7 +380,7 @@ function Paths.IsShown() return ns.Window.IsShown("zones") end
 -- open on Zones; closed when it is on Zones already
 function Paths.Toggle() ns.Window.Toggle("zones") end
 
-ns.Window.Register("zones", { label = "Zones", icon = "icon-goto", color = C.good, title = "Home base", group = 1, order = 2,
+ns.Window.Register("zones", { label = "Zones", icon = "icon-where", color = C.good, title = "Home base", group = 1, order = 2,
   tip = "The zones you could go to now: pick one as your home base - you work from it until it runs out",
   build = build, show = function() setScroll(0); Paths.Draw() end })
 ns.On("FR_TOGGLE_PATHS", function() Paths.Toggle() end)

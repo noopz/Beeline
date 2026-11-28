@@ -162,6 +162,21 @@ function Dungeons.Draw(view)
     c.quests:SetText("For the dungeon: " .. (r.quests or "") .. ((r.chainCount or 0) > 0 and string.format("  |cff8a93a6+ %d chain quest%s that unlock them|r", r.chainCount, r.chainCount == 1 and "" or "s") or "")
       .. (r.cut and ("\n|cffffb36bSkips: " .. r.cut .. "|r") or ""))
     end
+    -- the trip you are on: what it leaves for later at your level (ns.Dungeon.Later: can't take yet, red to you, put
+    -- off), each by the level it comes back at, a chain as one entry - none of it is off the trip
+    local later = isCur and ns.Dungeon and ns.Dungeon.Later and ns.Dungeon.Later(r, myLevel)
+    if later and #later > 0 then
+      local rows = {}
+      for _, g in ipairs(later) do
+        local names = {}
+        for _, e in ipairs(g.quests) do names[#names + 1] = ns.Dungeon.LaterText(e) end
+        if g.item then
+          for n, e in ipairs(g.quests) do names[n] = names[n] .. " (" .. e.reason .. ")" end
+          rows[#rows + 1] = "Once you have its item: " .. table.concat(names, ", ")
+        else rows[#rows + 1] = "At level " .. g.at .. ": " .. table.concat(names, ", ") end
+      end
+      c.quests:SetText((c.quests:GetText() or "") .. "\n\n|cffffb36bLater on this trip|r |cff8a93a6(back by itself at its level)|r\n" .. table.concat(rows, "\n"))
+    end
     c.go.label:SetText(isCur and "Following" or "Route me"); c.go:SetEnabled(not isCur)
     local col = isCur and C.gold or zc
     c.edge:SetVertexColor(col[1], col[2], col[3], isCur and 0.95 or 0.5)
@@ -263,6 +278,48 @@ function Dungeons.Available()
   return out
 end
 
+-- how many trips each side trips view lists for you now (as Dungeons.List lists them) and their sum: the card's rail
+-- shows them (UI/Card/Rail.lua), asking each time the card is laid out. A trip counts while a quest of it is not done:
+-- only a hand-in, a level or other routes change that, so the counts are worked out again only then (a pick-up, a kill
+-- or a log update ask nothing), and each trip is asked about up to its first quest not done
+local countMemo, countTotal, countFor, countLvl, countGen
+local turnIns = 0
+ns.On("QUEST_TURNED_IN", function() turnIns = turnIns + 1 end)
+local function left(r) -- (as the list: a trip with no quests of its own is never finished)
+  local any = false
+  for q in pairs(ns.QuestIds(r)) do if q > 0 then any = true; if not ns.State.IsCompleted(q) then return true end end end
+  return not any
+end
+local byDist = {}
+function Dungeons.Counts()
+  local routes = ns.Routes and ns.Routes()
+  local lvl = (UnitLevel and UnitLevel("player")) or 1
+  if countMemo and countFor == routes and countLvl == lvl and countGen == turnIns then return countMemo, countTotal end
+  local out = { dungeons = 0, class = 0, attune = 0, reward = 0 }
+  -- (dungeons: the nearest for your level as the list takes them - Dungeons.List - less the ones you finished; a dungeon
+  -- key is listed with them)
+  wipe(byDist)
+  local inBand = 0
+  for _, r in ipairs(ns.DungeonRoutes()) do
+    if r.special then
+      local v = Dungeons.Kind(r)
+      if v == "key" then v = "dungeons" end
+      if out[v] and left(r) then out[v] = out[v] + 1 end
+    else
+      byDist[#byDist + 1] = r
+      local q = tonumber(r.questLevel) or 0
+      if q <= lvl + 4 and q >= lvl - 4 then inBand = inBand + 1 end
+    end
+  end
+  local function dist(r) return math.abs((tonumber(r.questLevel) or 0) - lvl) end
+  table.sort(byDist, function(x, y) local dx, dy = dist(x), dist(y); if dx ~= dy then return dx < dy end return (x.dungeonName or "") < (y.dungeonName or "") end)
+  local take = inBand > 0 and math.min(SHOWN, inBand) or math.min(3, #byDist)
+  for i = 1, take do if left(byDist[i]) then out.dungeons = out.dungeons + 1 end end
+  wipe(byDist)
+  local total = out.dungeons + out.class + out.attune + out.reward
+  countMemo, countTotal, countFor, countLvl, countGen = out, total, routes, lvl, turnIns
+  return out, total
+end
 -- the Beeline window on a side trips view (default Dungeons), or closed when it is on it already
 function Dungeons.Toggle(view)
   view = Dungeons.VIEWS[view] and view or "dungeons"

@@ -33,6 +33,7 @@ ns.DEFAULTS = {
   remindFood = true,     -- eat for Well Fed
   remindGrimoire = true, -- warlocks: a grimoire at the demon trainer
   newsBar = true,        -- the "updated to ..." bar under the card after an update
+  rail = true,           -- the card's side rail (UI/Card/Rail.lua): Route, Where to?, Side trips, Log check, Options; its tab hides it
   keepMoments = true,    -- keep notes of odd moments on the card for the next /bee report (Moments.lua; on your PC only)
   skin = "beeline",      -- the look (UI/Skins): read once at login; changing it reloads the UI (Options)
 }
@@ -347,7 +348,7 @@ local starterSaid
 function ns.StarterNote()
   if starterSaid or not (ns.planKey and ns.planKey.starter) then return end
   starterSaid = true
-  C_Timer.After(5, function() ns.Print("Following the plan for your race and class (steps you've already done are skipped). Bored of a zone? The house on the card (/bee home) shows where else you could go.") end)
+  C_Timer.After(5, function() ns.Print("Following the plan for your race and class (steps you've already done are skipped). Bored of a zone? Where to? on the card's side rail (/bee home) shows where else you could go.") end)
 end
 
 -- flight masters and vendors come for both factions (FlightMasters.lua, Vendors.lua: ns.FLIGHT_BY, ns.VENDORS_BY);
@@ -361,7 +362,7 @@ function ns.UseFaction()
 end
 -- what you do to the route (the card's buttons, the slash commands): FR_USER_ACTION(name, ...) fires just before the
 -- Engine function runs, its arguments after the name. Wrapped once, here, when every Engine file has loaded.
-ns.USER_ACTIONS = { "Skip", "MarkDone", "Undo", "Back", "Forward", "FocusOn", "Nope", "NotOffered", "Jump" }
+ns.USER_ACTIONS = { "Skip", "MarkDone", "Undo", "Back", "Forward", "FocusOn", "Nope", "NotOffered", "Jump", "Later" }
 local actionsWrapped
 function ns.WrapUserActions()
   local E = ns.Engine
@@ -382,6 +383,7 @@ ns.On("ADDON_LOADED", function(name)
   BeelineChar = BeelineChar or {}
   -- the option once shared BeelineDB.moments with the moments queue: an off saved that way stays off
   if BeelineDB.moments == false then BeelineDB.keepMoments, BeelineDB.moments = false, nil end
+  BeelineDB.zonesPanel = nil -- (the zones-ahead panel beside the card is gone, and its setting with it: the side rail took its tab)
   copyDefaults(BeelineDB, ns.DEFAULTS)
   ns.db = BeelineDB
   ns.Style.UseSkin(ns.db.skin) -- (before any frame is built: FR_LOADED builds the card)

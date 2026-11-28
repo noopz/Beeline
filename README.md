@@ -12,13 +12,15 @@ play: your plan loads by itself, quests you've already done are skipped, and it 
 
 **The next thing to do, always on screen.** It reads your quest log live, counts kills and loot, ticks steps off as you
 play, and fits in hand-ins you finished early when you pass by. Skip a quest or a dungeon and the route keeps up.
-The **?** on the card says why it picked a step, and the game's 3D navigation marker shows where to go.
+The **?** on the card says why it picked a step, and the game's 3D navigation marker shows where to go. A rail down
+the card's left side opens your route, Where to?, the side trips and the quest log check, each with its count (the
+tab beside it folds it away).
 
 ![The card, step by step](docs/img/card.gif)
 
 ## Pick your own zone
 
-**Bored of a zone? Pick another.** "Where to?" (the route window, or `/bee paths`) lists the zones you could go to
+**Bored of a zone? Pick another.** "Where to?" (the signpost on the card's rail, or `/bee home`) lists the zones you could go to
 now, with the XP each still has for you and the level that gets you to. Pick one and the route takes you there. If a
 zone's quests need an earlier part you haven't done, those steps come first when they're close by, and a chain you
 carry that's about to turn gray is pointed out before you leave. PLANNED NEXT takes you back to your plan, wherever

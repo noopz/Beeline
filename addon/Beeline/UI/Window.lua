@@ -103,6 +103,7 @@ local function build()
   f.close = Style.CloseButton(f)
   f.intro = Style.Text(f, 10, C.sub); f.intro:SetPoint("TOPLEFT", Window.LEFT, -34); f.intro:SetPoint("RIGHT", f, "RIGHT", -PAD - Window.ACTION_W, 0); f.intro:SetWordWrap(false)
   f:Hide()
+  f:HookScript("OnHide", function() if ns.Rail then ns.Rail.Lit() end end)
 end
 
 function Window.Frame() return f end
@@ -124,6 +125,7 @@ function Window.Show(key)
   p:Show()
   Window.RefreshRail()
   if def.show then def.show(key) end
+  if ns.Rail then ns.Rail.Lit() end -- (the card's side rail lights the button for this view)
 end
 -- open on view key; closed when it is on that view already
 function Window.Toggle(key)

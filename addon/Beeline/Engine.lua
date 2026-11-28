@@ -183,14 +183,18 @@ ns.On("PLAYER_LEVEL_UP", function() Engine.GrayForget() end)
 -- pick-up with nothing to fight (a delivery: no objective on the route) is still taken when the plan has it, unless
 -- the step has no minLevel - then red is all we know. Only a player behind the plan's levels meets it.
 -- -> the level it comes back at, or nil
+-- (Engine.RedAt: the lowest quest level red to you at level L; Engine.RedUntil: the level a quest of level ql stops
+-- being red at. A trip's pick-ups use the line as it is: Engine.TripLater)
+function Engine.RedAt(L) return L + 5 end
+function Engine.RedUntil(ql) return ql - 4 end
 function Engine.TooHigh(s, L)
   local ql = s and s.q and tonumber(s.level)
   if not ql then return nil end
   L = L or (UnitLevel and UnitLevel("player")) or 1
-  if ql < L + 5 then return nil end
+  if ql < Engine.RedAt(L) then return nil end
   local k = s.k
   if k == "obj" or (k == "turnin" and not State.QuestReady(s.q)) or (k == "accept" and (not s.minLevel or #Engine.ObjStepsOf(s.q) > 0)) then
-    return ql - 4
+    return Engine.RedUntil(ql)
   end
   return nil
 end
@@ -1011,7 +1015,190 @@ end
 function Engine.WaitsForHandIn(s)
   if not (s and s.k == "accept") or (BeelineData and BeelineData.zoneRoute) then return false end
   if s.minLevel and UnitLevel("player") < s.minLevel then return false end
+  if Engine.TripLaterOf and Engine.TripLaterOf(s) then return false end -- (put off on a trip: it waits for a level)
   return not Engine.TooHigh(s)
+end
+-- Later on a trip (a dungeon route or a side trip): its pick-ups you can't take yet (your level under the step's
+-- minLevel, the quest's required level) or that are red to you (Engine.RedAt: 5 or more levels above you) are not
+-- walked - they wait ("wait", passed over like a level wait), and so does every quest that follows from one of them on
+-- the trip (its follow-ups need it handed in first). Each comes back by itself at the level it opens at, on this run of
+-- the trip or a later one. Nothing is taken off the trip: its steps stay as they are.
+-- And one you put off yourself (Engine.Later): until your next level or your next start of that trip.
+-- Engine.TripLater(r[, L]) -> { [quest] = entry }, entry = { q, name, level, minLevel, at (the level it comes back at),
+--   why = "level" | "red" | "manual" | "item" (started by an item not in your bags: itemName) | "follows", root (the quest it waits with), step (its pick-up's index), red (the
+--   quest level, when red) } - for any trip, not only the one you are on (the side trips window asks of each)
+local laterGen = 0 -- (bumped by what changes the set: your log, your quests done, a Later of yours)
+for _, e in ipairs({ "FR_STATE", "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED" }) do ns.On(e, function() laterGen = laterGen + 1 end) end
+local laterMemo = setmetatable({}, { __mode = "k" })
+-- a trip's pick-up started by an item (s.item: the Oathstone of Ysera's Dragonflight, The Essence of Eranikus's second
+-- part): in your bags? Its count at the last look is kept, so a bag change that brings it or takes it (BAG_UPDATE_DELAYED,
+-- only for the items a trip asked of) works the set out again - nothing per frame, nothing for a bag change otherwise
+local itemSeen = {}
+local function haveItem(item)
+  if not ns.GetItemCount then return true end
+  local ok, n = pcall(ns.GetItemCount, item)
+  n = ok and tonumber(n) or 0
+  itemSeen[item] = n
+  return n > 0
+end
+ns.On("BAG_UPDATE_DELAYED", function()
+  if next(itemSeen) == nil or not ns.GetItemCount then return end
+  for item, n in pairs(itemSeen) do
+    local ok, c = pcall(ns.GetItemCount, item)
+    c = ok and tonumber(c) or 0
+    if (c > 0) ~= (n > 0) then
+      itemSeen[item] = c; laterGen = laterGen + 1
+      if ns.State and ns.State.Announce then ns.State.Announce("FR_STATE", false) end
+      return
+    end
+  end
+end)
+local function isTripRoute(r) return r ~= nil and (r.dungeon or r.special) and true or false end
+Engine.IsTripRoute = isTripRoute
+-- your Laters on trip r: { [quest] = the level you put it off at }, the ones from another level dropped
+local function manualOf(r, L)
+  local all = ns.char and ns.char.tripLater
+  local m = all and r and all[r.id]
+  if not m then return nil end
+  for q, lv in pairs(m) do if lv ~= L then m[q] = nil end end
+  if next(m) == nil then all[r.id] = nil; return nil end
+  return m
+end
+local function computeLater(r, L)
+  local list = ns.Steps(r)
+  local out, onTrip = {}, {}
+  local man = manualOf(r, L)
+  local PRE = ns.QUEST_PRE or {}
+  for i = 1, #list do
+    local s = list[i]
+    local q = s.q
+    if q and q > 0 then onTrip[q] = true end
+    if s.k == "accept" and q and q > 0 and not out[q] and not State.OnQuest(q) and not State.IsCompleted(q) then
+      local at, why, ml, red = nil, nil, tonumber(s.minLevel), nil
+      if ml and L < ml then at, why = ml, "level" end
+      local ql = tonumber(s.level)
+      if ql and ql >= Engine.RedAt(L) then
+        red = ql
+        local back = Engine.RedUntil(ql)
+        if not at or back > at then at, why = back, "red" end
+      end
+      if not at and man and man[q] then at, why = L + 1, "manual" end
+      -- (started by an item, its earlier quests in: it waits for that item in your bags, its follow-ups with it - where
+      -- the item comes from, nothing says: the Oathstone isn't 3373's reward, and no drop of it is known)
+      if not at and s.item and State.PrereqsMet(q) and not haveItem(s.item) then at, why = L, "item" end
+      if at then out[q] = { q = q, name = s.name, level = ql, minLevel = ml, at = at, why = why, red = red, step = i, root = q, itemName = why == "item" and (s.itemName or ("item " .. s.item)) or nil } end
+    end
+  end
+  if next(out) == nil then return out end
+  -- the follow-ups, up the chains (ns.QUEST_PRE: all of g, one of s): a quest on the trip not in your log or done,
+  -- whose prerequisite is one put off (one of g; of s, every one of them still to do that this trip has)
+  local function heldBy(q)
+    local pre = PRE[q]
+    if not pre then return nil end
+    local g, sl = pre.g, pre.s
+    if g then for n = 1, #g do local e = out[g[n]]; if e and not State.IsCompleted(g[n]) then return e end end end
+    if sl and #sl > 0 then
+      local held
+      for n = 1, #sl do
+        local p = sl[n]
+        if State.IsCompleted(p) or State.OnQuest(p) then return nil end
+        local e = out[p]
+        if e then held = held or e elseif onTrip[p] then return nil end
+      end
+      return held
+    end
+    return nil
+  end
+  local stepOf = {}
+  for i = 1, #list do local s = list[i]; if s.k == "accept" and s.q and not stepOf[s.q] then stepOf[s.q] = i end end
+  for _ = 1, 12 do -- (a chain this many quests long at most; a loop in the data stops here)
+    local moved = false
+    for q in pairs(onTrip) do
+      local own = out[q]
+      if (not own or own.why ~= "follows") and not State.OnQuest(q) and not State.IsCompleted(q) then
+        local e = heldBy(q)
+        if e and e ~= own then
+          local root = out[e.root] or e
+          local s = stepOf[q] and list[stepOf[q]]
+          out[q] = { q = q, name = (s and s.name) or (own and own.name), level = (s and tonumber(s.level)) or (own and own.level), minLevel = s and tonumber(s.minLevel),
+            at = math.max(own and own.at or 0, e.at), why = "follows", root = root.q, after = e.q, step = stepOf[q] }
+          moved = true
+        end
+      end
+    end
+    if not moved then break end
+  end
+  -- (a root that came to follow another: its own follow-ups follow that one's root)
+  for _, e in pairs(out) do
+    local r0, n = e, 0
+    while out[r0.root] and out[r0.root] ~= r0 and n < 12 do r0 = out[r0.root]; n = n + 1 end
+    e.root = r0.q
+  end
+  return out
+end
+function Engine.TripLater(r, L)
+  if not isTripRoute(r) then return nil end
+  L = L or (UnitLevel and UnitLevel("player")) or 1
+  local list = ns.Steps(r)
+  local m = laterMemo[r]
+  if m and m.L == L and m.gen == laterGen and m.sgen == Engine.stateGen and m.list == list and m.lgen == (list._gen or 0) and (not batch or m.batch == batch) then return m.set end
+  local set = computeLater(r, L)
+  laterMemo[r] = { L = L, gen = laterGen, sgen = Engine.stateGen, list = list, lgen = list._gen or 0, batch = batch, set = set }
+  return set
+end
+-- the entry for a step of the trip you are on, or nil (a pick-up put off: Engine.TripLater)
+function Engine.TripLaterOf(s)
+  if not (s and s.q and s.k == "accept" and isTripRoute(BeelineData)) then return nil end
+  local set = Engine.TripLater(BeelineData)
+  return set and set[s.q] or nil
+end
+-- can the trip's pick-up at step i (default the card's) be put off (Engine.Later)? -> true, or false and why. The
+-- card's Later button shows on what this takes
+function Engine.CanLater(i)
+  i = i or (Engine.Shown and Engine.Shown())
+  local s = i and steps()[i]
+  if not isTripRoute(BeelineData) then return false, "not on a trip" end
+  if not (s and s.k == "accept" and s.q and s.q > 0) then return false, "not a pick-up" end
+  if State.OnQuest(s.q) or State.IsCompleted(s.q) then return false, "you have it already" end
+  if Engine.TripLaterOf(s) then return false, "it waits already" end
+  return true
+end
+-- puts the trip's pick-up at step i (default the card's) off until your next level or your next start of this trip,
+-- whichever comes first; its follow-ups wait with it. Kept per character (ns.char.tripLater), not a skip: nothing is
+-- marked done. Undo brings it back (its history entry: later = { route, q }). -> true, or false and why
+function Engine.Later(i)
+  i = i or (Engine.Shown and Engine.Shown())
+  local ok, why = Engine.CanLater(i)
+  if not ok then return false, why end
+  local d, s = BeelineData, steps()[i]
+  local L = (UnitLevel and UnitLevel("player")) or 1
+  ns.char.tripLater = ns.char.tripLater or {}
+  local m = ns.char.tripLater[d.id] or {}
+  ns.char.tripLater[d.id] = m
+  m[s.q] = L
+  laterGen = laterGen + 1
+  if ns.char.history then
+    table.insert(ns.char.history, { kind = "later", ids = {}, later = { route = d.id, q = s.q } })
+    if #ns.char.history > 50 then table.remove(ns.char.history, 1) end
+  end
+  if ns.Why then ns.Why("card", (s.name or ("quest " .. s.q)) .. ": later on this trip, back at level " .. (L + 1) .. " or your next start of it") end
+  Engine.StateChanged()
+  Engine.view = nil
+  Engine.Refresh()
+  return true
+end
+-- a Later taken back (Engine.Undo): the pick-up is walked again, its follow-ups with it
+function Engine.LaterUndo(e)
+  local m = e and ns.char.tripLater and ns.char.tripLater[e.route]
+  if not (m and m[e.q]) then return end
+  m[e.q] = nil
+  if next(m) == nil then ns.char.tripLater[e.route] = nil end
+  laterGen = laterGen + 1; Engine.StateChanged()
+end
+-- a new start of trip id (ns.EnterDungeonRoute): your Laters on it are gone
+function Engine.LaterReset(id)
+  local all = ns.char and ns.char.tripLater
+  if all and id and all[id] then all[id] = nil; laterGen = laterGen + 1; Engine.StateChanged() end
 end
 local PVP = ns.PVP_QUESTS -- (PvpQuests.lua loads before this file: one table, read per step)
 -- steps whose status was worked out, ever (the perf battery counts them per moment, tests/_perf.lua "status")
@@ -1060,6 +1247,9 @@ local function statusRaw(i)
   end
   if k == "accept" then
     if State.OnQuest(s.q) or State.IsCompleted(s.q) then return "done" end
+    -- (on a trip: one put off - you can't take it yet, it is red to you, you said later, or it follows one of those -
+    -- waits, and comes back at its level: Engine.TripLater)
+    if isTripRoute(BeelineData) and Engine.TripLaterOf(s) then return "wait" end
     if s.minLevel and UnitLevel("player") < s.minLevel then return "wait" end
     if Engine.TooHigh(s) then return "wait" end -- (red: the game's own colour, Engine.TooHigh)
     -- on a zone you picked, its prerequisites not handed in (ns.QUEST_PRE): it waits, like a level - the giver would
@@ -1074,6 +1264,10 @@ local function statusRaw(i)
       if BeelineData and BeelineData.zoneRoute then
         -- (one whose prerequisites can't be got here at all is cut above, every step of it: Engine.Unreachable)
         if not State.PrereqsMet(s.q) then return "wait" end
+      -- on a trip, one whose prerequisites aren't all handed in waits for them, in your log or not: the trip has them
+      -- before it, but one can be stuck (In Eranikus' Own Words was offered with The Essence of Eranikus's second part
+      -- never started - its hand-in blocked). One of another dungeon's is cut above (Engine.Unreachable)
+      elseif isTripRoute(BeelineData) and not State.PrereqsMet(s.q) then return "wait"
       elseif Engine.WaitsOnLog(s.q) then return "wait" end
     end
     if State.LogFull and State.LogFull() then return "full" end
@@ -1748,11 +1942,15 @@ function Engine.KnowsThisFlightPoint(s)
   return s.zone and Engine.KnowsFlightIn(s.zone) or false
 end
 -- a known flight path in this zone: node names look like "Sentinel Hill, Westfall" / "Lakeshire, Redridge"
+-- (the zone's first word matches a whole word of the name, never part of one: "Mount Hyjal"'s "mount" is not
+-- "Stonetalon Peak, Stonetalon Mountains" - 3.3.0 sent a gnome 55 to a Tainted Foothills flight path never taken)
 function Engine.KnowsFlightIn(zone)
   local z = norm(zone); local first = z:match("^(%S+)")
+  if first and #first < 5 then first = nil end
   for name in pairs(State.knownTaxi or {}) do
     local n = name:lower()
-    if n:find(z, 1, true) or (first and #first >= 5 and n:find(first, 1, true)) then return true end
+    if n:find(z, 1, true) then return true end
+    if first then for w in n:gmatch("[^%s,]+") do if w == first then return true end end end
   end
   return false
 end
@@ -2290,6 +2488,7 @@ function Engine.Undo()
   if h.skipQ and ns.char.skipQ then ns.char.skipQ[h.skipQ] = nil; Engine.StateChanged() end
   Engine.ResetFloor() -- (what you undid may be behind your place in the plan: it is yours again)
   for _, q in ipairs(h.nope or {}) do Engine.BringBack(q) end
+  if h.later then Engine.LaterUndo(h.later) end -- (a trip's pick-up you put off: walked again)
   Engine.view = nil
   -- (the giver had nothing for you, undone: those quests are offered as far as the route knows, that giver too)
   if h.avail and ns.Avail and ns.Avail.Unjudge then
@@ -2298,7 +2497,7 @@ function Engine.Undo()
   end
   if ns.ZoneCountsChanged then ns.ZoneCountsChanged() end -- (Where to?'s counts: what you undid counts again)
   Engine.Refresh()
-  ns.Print(h.kind == "skip" and "skip undone." or (h.kind == "nope" or h.kind == "notoffered") and "back on your route." or "undone.")
+  ns.Print(h.kind == "skip" and "skip undone." or (h.kind == "nope" or h.kind == "notoffered") and "back on your route." or h.kind == "later" and "back on this trip." or "undone.")
 end
 -- look at the previous step (view only; progress is unchanged)
 function Engine.Back()

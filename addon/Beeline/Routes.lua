@@ -66,6 +66,7 @@ function ns.EnterDungeonRoute(id)
   -- (from a zone you picked: your plan stays the way back, not the zone route that took its place)
   if BeelineData and not BeelineData.dungeon and not BeelineData.zoneRoute then ns.char.returnTo = BeelineData.id end
   ns.char.chosenTrip = id -- (you picked it: kept across logins - ns.SavedRoute)
+  if ns.Engine and ns.Engine.LaterReset then ns.Engine.LaterReset(id) end -- (a new start: what you put off on it is back)
   ns.SelectRoute(id)
   ns.Print((r.special and "Side trip: " or "Dungeon route: ") .. (r.dungeonName or r.title) .. ". Your plan is kept - \"Back to plan\" on the card returns you to it.")
 end

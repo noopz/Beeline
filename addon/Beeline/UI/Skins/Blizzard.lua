@@ -247,8 +247,10 @@ function B.Dot(parent, size, layer)
   d:SetSize(math.max(4, size - 3), math.max(4, size - 3))
   return d
 end
-function B.RailBg(rail, a)
-  local t = Style.Fill(rail, "BACKGROUND"); t:SetAllPoints(); paint(t, C.black, 0.35)
+-- (flat: a tint at alpha a and no edge line, as the card's side rail has)
+function B.RailBg(rail, a, flat)
+  local t = Style.Fill(rail, "BACKGROUND"); t:SetAllPoints(); paint(t, C.black, flat and a or 0.35)
+  if flat then return t end
   local e = Style.Fill(rail, "BORDER"); e:SetWidth(1); e:SetPoint("TOPRIGHT"); e:SetPoint("BOTTOMRIGHT"); paint(e, C.line, 0.9)
   return t
 end

@@ -25,6 +25,8 @@ function Card.Describe(s)
   if s.k == "accept" or s.k == "turnin" then
     title = verb .. " " .. qc .. (s.name or ("quest " .. tostring(s.q))) .. "|r"
     detail = s.npc and ((s.k == "accept" and "from " or "to ") .. s.npc) or nil
+    -- (a pick-up an item starts, on a trip: its use button is above the card)
+    if s.k == "accept" and s.item and not s.npc then detail = "use the " .. (s.itemName or "item") .. " (the icon above the card)" end
     -- one who walks a route (Patrol.lua): not at the pin, somewhere along the route the map draws
     if detail and ns.Patrol and ns.Patrol.For(s) then detail = detail .. " · walks a route, see the map" end
   elseif s.k == "obj" then
