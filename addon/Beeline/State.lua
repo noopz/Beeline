@@ -485,11 +485,14 @@ function State.ScanTaxi()
   for _, m in ipairs(State.TAXI_SCAN_MAPS) do add(m) end
   for _, side in pairs(ns.FLIGHT_BY or {}) do for m in pairs(side) do add(m) end end
   for m in pairs((ns.TravelData and ns.TravelData.BOUNDS) or {}) do add(m) end
-  local found, total, undiscovered = {}, 0, 0
+  -- (each flight point once, by name: a node is listed on every map it shows on - a continent's and its zone's -
+  -- and the count read 1074)
+  local found, counted, total, undiscovered = {}, {}, 0, 0
   for _, m in ipairs(maps) do
     local ok, nodes = pcall(C_TaxiMap.GetTaxiNodesForMap, m)
     for _, n in ipairs(ok and type(nodes) == "table" and nodes or {}) do
-      if n.name and (n.faction == mine or n.faction == neutral) then
+      if n.name and (n.faction == mine or n.faction == neutral) and not counted[n.name] then
+        counted[n.name] = true
         total = total + 1
         if n.isUndiscovered then undiscovered = undiscovered + 1 else found[n.name] = true end
       end
@@ -498,9 +501,12 @@ function State.ScanTaxi()
   -- (no flight point at all: the client tells nothing either - guessed the same way)
   if total == 0 then return State.GuessTaxi() end
   if total >= 10 and undiscovered == 0 then
-    if ns.Why then ns.Why("taxi", "world map lists " .. total .. " flight points, none undiscovered: not trusted (open a flight master's map)") end
+    -- (said once per character, not at every login: it is the same client every time. A trusted reading says it again)
+    if ns.Why and not ns.char.taxiUntrusted then ns.Why("taxi", "world map lists " .. total .. " flight points, none undiscovered: not trusted (open a flight master's map)") end
+    ns.char.taxiUntrusted = true
     return State.GuessTaxi()
   end
+  ns.char.taxiUntrusted = nil
   local added = 0
   for name in pairs(found) do if not State.knownTaxi[name] then State.knownTaxi[name] = true; added = added + 1 end end
   ns.char.knownTaxi = State.knownTaxi

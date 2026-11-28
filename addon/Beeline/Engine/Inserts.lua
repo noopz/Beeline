@@ -90,17 +90,20 @@ function Engine.InsertStop(new, px, py, pinst, opts)
   local list = steps()
   local cur = Engine.current
   if not cur then return nil end
-  -- (from your place in the plan, not the card's step when that is a quest from the part you passed)
-  local fromPlan = (ns.Next and ns.Next.taken and ns.Next.taken == list[cur] and Engine.planned and Engine.planned > cur) and Engine.planned or cur
-  local from = math.max(fromPlan, opts.minIndex or cur)
+  -- (from your place in the plan, not the card's step when that is behind it: a quest from the part you passed, the
+  -- floor's step of a quest you hold. A stop put in the stretch between them became the card from wherever you were -
+  -- the plan never goes back for it, and nothing there reads "behind you" for a stop added)
+  local p = Engine.planned
+  local base = (p and p > cur and list[p]) and p or cur
+  local from = math.max(base, opts.minIndex or base)
   Engine.lastInsertCost = nil -- (a stop that can't go anywhere leaves no price behind: the merge's "left for later" read the last one)
   local X = wpos(new); if not X then return nil end
   -- gaps: (you -> current step) when you're on the same map, then each pair of neighbouring stops after it
   local best, bestCost = opts.at, nil
   local prev = nil -- the near end of the gap: { w = world position, m, x, y = its zone position }
-  if px and pinst == X[3] and from == cur then local pm, zx, zy = Engine.Pos(); prev = { w = { px, py, pinst }, m = pm, x = zx, y = zy } end
+  if px and pinst == X[3] and from == base then local pm, zx, zy = Engine.Pos(); prev = { w = { px, py, pinst }, m = pm, x = zx, y = zy } end
   -- chained stops start after a given step: the gap right after it counts too
-  if from > cur and list[from - 1] then local t = list[from - 1]; local w = wpos(t); if w and w[3] == X[3] then prev = { w = w, m = t.m, x = t.x, y = t.y } end end
+  if from > base and list[from - 1] then local t = list[from - 1]; local w = wpos(t); if w and w[3] == X[3] then prev = { w = w, m = t.m, x = t.x, y = t.y } end end
   -- opts.onMap: only a gap with an end in that zone (straight lines say nothing across a zone border: mountains)
   local function touches(a, bm) return not opts.onMap or (a and a.m == opts.onMap) or bm == opts.onMap end
   local tail, tailAt
@@ -124,11 +127,11 @@ function Engine.InsertStop(new, px, py, pinst, opts)
   -- riding the current travel step (no flight path there yet): the road from you to the first stop at the other end
   -- is a real stretch - a stop on it goes before the travel step, i.e. you do it on the way
   local ride = nil
-  if prev and from == cur and list[cur] and list[cur].k == "fly" and Engine.TravelPlan then -- not for stops that must come after an earlier one
-    local plan = Engine.TravelPlan(list[cur])
+  if prev and from == base and list[base] and list[base].k == "fly" and Engine.TravelPlan then -- not for stops that must come after an earlier one
+    local plan = Engine.TravelPlan(list[base])
     local m = ns.State.Position()
     -- only a real ride: if the trip there involves boats or flights, stops at the other end go after the travel step
-    local trip = Engine.TravelFor and Engine.TravelFor(list[cur])
+    local trip = Engine.TravelFor and Engine.TravelFor(list[base])
     local riding = not trip or (trip.how == "ride" and not (trip.legs and #trip.legs > 1))
     if riding and plan and (plan.ride or not plan.via or plan.via == m) then ride = prev end
   end
@@ -150,7 +153,7 @@ function Engine.InsertStop(new, px, py, pinst, opts)
         if ride then
           if touches(ride, s.m) then
             local c = wd(ride.w, X) + wd(X, w) - wd(ride.w, w)
-            if not bestCost or c < bestCost then bestCost, best = c, cur end -- before the travel step: on the way
+            if not bestCost or c < bestCost then bestCost, best = c, base end -- before the travel step: on the way
           end
           ride = nil
         end
@@ -190,6 +193,8 @@ function Engine.InsertStop(new, px, py, pinst, opts)
   Engine.StepsChanged(list)
   if Engine.focus and Engine.focus >= best then Engine.focus = Engine.focus + 1 end
   if Engine.view and Engine.view >= best then Engine.view = Engine.view + 1 end
+  -- (the plan's place moves down with its step: the next stop of the same pass is placed from it, not one before it)
+  if Engine.planned and Engine.planned > best then Engine.planned = Engine.planned + 1 end
   Engine.RunShift(best)
   return best
 end

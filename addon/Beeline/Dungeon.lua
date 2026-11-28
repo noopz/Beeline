@@ -146,7 +146,10 @@ function Dungeon.LaterReason(e, L)
     parts[#parts + 1] = "level " .. e.level .. ": " .. up .. " level" .. (up == 1 and "" or "s") .. " above you"
   end
   if #parts == 0 and e.why == "manual" then parts[1] = "you put it off" end
-  if #parts == 0 and e.why == "item" then parts[1] = "needs the " .. (e.itemName or "item that starts it") .. " in your bags" end
+  if #parts == 0 and e.why == "item" then
+    local bank = e.item and ns.QuestItems and ns.QuestItems.BankNote and ns.QuestItems.BankNote(e.item)
+    parts[1] = "needs the " .. (e.itemName or "item that starts it") .. " in your bags" .. (bank and (" (" .. bank .. ")") or "")
+  end
   return table.concat(parts, "; ")
 end
 -- "The Fate of the Kingdom", or "Stormwind Rendezvous -> 3 more"
@@ -163,7 +166,7 @@ function Dungeon.Later(r, L)
   local roots, order = {}, {}
   for q, e in pairs(set) do
     if e.root == q then
-      local x = { q = q, name = e.name, level = e.level, minLevel = e.minLevel, at = e.at, why = e.why, itemName = e.itemName, step = e.step, more = 0, follow = {} }
+      local x = { q = q, name = e.name, level = e.level, minLevel = e.minLevel, at = e.at, why = e.why, item = e.item, itemName = e.itemName, step = e.step, more = 0, follow = {} }
       x.reason = Dungeon.LaterReason(x, L)
       roots[q] = x; order[#order + 1] = x
     end

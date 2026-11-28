@@ -42,12 +42,13 @@ local function yardsOf(m, x, y, px, py, pinst)
 end
 local mapNameOf = ns.Util.MapName
 Engine.SIDE_LEVEL_DIP = 5  -- the most a plan's planned level drops along it, with a margin
--- the quests a step list has steps for, built once per list (SideFits asks "is it on your route?" about once a second)
+-- the quests a step list has steps for, built once per list (SideFits asks "is it on your route?" about once a second).
+-- Not a side pick-up offered here: that one is not the plan's, and its quest is still not "on your route"
 local qsOf = { list = nil, gen = 0, set = nil }
 local function questsOf(list)
   if qsOf.list ~= list or qsOf.gen ~= (list._gen or 0) then
     local set = {}
-    for _, s in ipairs(list) do if s.q then set[s.q] = true end end
+    for _, s in ipairs(list) do if s.q and not s.side then set[s.q] = true end end
     qsOf.list, qsOf.gen, qsOf.set = list, list._gen or 0, set
   end
   return qsOf.set
@@ -56,12 +57,16 @@ end
 function Engine.SideFits(q)
   local d = ns.SIDE_QUESTS and ns.SIDE_QUESTS[q]
   if not d then return false, "not a side quest" end
+  -- (yours already, or on your route: asked first - a quest finished and in your log was logged "little XP" every
+  -- two minutes while you stood at its giver)
+  if State.IsCompleted(q) or State.OnQuest(q) then return false, "yours already" end
+  local list = steps()
+  if questsOf(list)[q] then return false, "on your route" end
   local lvl = UnitLevel("player") or 1
   if not sideMine(d) then return false, "not for you" end
   if lvl < d.r then return false, "needs level " .. d.r end
   if d.l < lvl - Engine.SIDE_BELOW or d.l > lvl + Engine.SIDE_ABOVE then return false, "not near your level" end
   if d.xp < Engine.SIDE_XP * d.l then return false, "little XP" end
-  if State.IsCompleted(q) or State.OnQuest(q) then return false, "yours already" end
   if ns.Nope(q) then return false, "you are not doing it" end
   local needs = ns.Avail and ns.Avail.Needs and ns.Avail.Needs(q)
   if needs then return false, needs end
@@ -80,8 +85,7 @@ function Engine.SideFits(q)
   if State.LogFull and State.LogFull() then return false, "your quest log is full" end
   -- the stops still ahead of you, by zone - while the quest is not gray there
   -- (from the plan's own next step: the card may be on a later one you happen to stand at)
-  local list, ahead, from = steps(), {}, Engine.planned or Engine.current or 1
-  if questsOf(list)[q] then return false, "on your route" end
+  local ahead, from = {}, Engine.planned or Engine.current or 1
   -- (only stops at most SIDE_LATE levels above the quest; planned level never drops by more than SIDE_LEVEL_DIP
   -- along a plan, so the walk stops past that)
   local cap, top = d.l + Engine.SIDE_LATE, 0
@@ -117,6 +121,8 @@ function Engine.SideFits(q)
   return true, zones
 end
 local sideSteps, sideAt, sideX, sideY = {}, -100, nil, nil -- the pick-ups offered on this step list; when and where you last looked around
+-- the answers not worth a line in /bee why: not yours to take, or yours already
+Engine.SIDE_QUIET = { ["not for you"] = true, ["yours already"] = true, ["on your route"] = true, ["in your log"] = true, ["not near your level"] = true }
 local sideNo = {} -- [quest] = when it last did not fit (asked again after SIDE_AGAIN s: the answer walks the whole route)
 Engine.SIDE_AGAIN = 30
 ns.On("FR_ROUTE_CHANGED", function() wipe(sideSteps); wipe(sideNo); sideAt = -100 end)
@@ -154,7 +160,7 @@ function Engine.SideOffer(px, py, pinst, force)
           ok, zones = Engine.SideFits(q)
           sideNo[q] = not ok and now or nil
           -- (why not, for the quests you could take: answered in /bee why)
-          if not ok and zones ~= "not for you" and zones ~= "yours already" and zones ~= "not near your level" and ns.Why then
+          if not ok and not Engine.SIDE_QUIET[zones] and ns.Why then
             ns.Why("side", ns.SIDE_QUESTS[q].n .. " (" .. g[1] .. ", right here) is not offered: " .. tostring(zones))
           end
         end
@@ -251,8 +257,10 @@ local function sideStops()
             if best and Engine.InsertStop(stop(best), px, py, pinst, { maxCost = 2.5 * Engine.SIDE_OBJ_YD, maxIndex = last, why = "a side quest in your log (" .. sq.n .. "): where it costs least" }) then
               added = true; sideMiss[mk] = nil
             else
-              sideMiss[mk] = { list = list, x = px, y = py, t = GetTime() }
-              if ns.Why then ns.Why("side", sq.n .. ": no place on your route for " .. o[2] .. " yet") end
+              -- (said once per step list: it was retried, and logged, every 30 s or 60 yd)
+              local told = miss and miss.told == list
+              sideMiss[mk] = { list = list, x = px, y = py, t = GetTime(), told = list }
+              if not told and ns.Why then ns.Why("side", sq.n .. ": no place on your route for " .. o[2] .. " yet") end
             end
           end
         end

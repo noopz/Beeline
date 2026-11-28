@@ -25,6 +25,17 @@ Travel.DANGER_ABOVE, Travel.TOWN_WALK = TD.DANGER_ABOVE, TD.TOWN_WALK
 Travel.DANGER_HERE, Travel.DANGER_HERE_YD = 3, 400
 -- a ride leg points at the first waypoint at least this far ahead (yards): nearer ones are under your feet
 Travel.AHEAD_YD = 40
+-- a waypoint of a ride you are already past: within PAST_YD of it and nearer the point after it than it is. A zone
+-- crossing's point can sit short of where the zone really changes (Western Plaguelands / Eastern Plaguelands: on the
+-- Thondroril River, ~150 yd before the road enters Eastern Plaguelands), so "the zone changed" comes too late: a
+-- gnome warlock 55 rode past it on the road and the arrow turned back to it (user)
+Travel.PAST_YD = 120
+-- (pw: where you are, xw: the waypoint, nw: the point after it on the way; world coords { x, y, instance })
+function Travel.Past(pw, xw, nw)
+  if not (pw and xw and nw and pw[3] == xw[3] and nw[3] == xw[3]) then return false end
+  local function dd(a, b) return math.sqrt((a[1] - b[1]) ^ 2 + (a[2] - b[2]) ^ 2) end
+  return dd(pw, xw) <= Travel.PAST_YD and dd(pw, nw) + 5 < dd(xw, nw)
+end
 Travel.DOCKS, Travel.ZONE_MIN, Travel.BOATS, Travel.GATES = TD.DOCKS, TD.ZONE_MIN, TD.BOATS, TD.GATES
 Travel.SPELLS = TD.SPELLS or {}
 Travel.ZONE_MIN_HORDE = TD.ZONE_MIN_HORDE or {}
@@ -709,8 +720,12 @@ local function planTrip(from, to, opts, G)
         -- - the first one beyond Travel.AHEAD_YD (a nearer one points at your feet)
         local first
         -- (preferably a border crossing or a gate, not a flight master or pier the road passes: that reads as "fly")
-        for _, x in ipairs(c.via) do if x.w and f.w and (x.kind == "cross" or x.gate) and d(f, x) > Travel.AHEAD_YD then first = x; break end end
-        if not first then for _, x in ipairs(c.via) do if x.w and f.w and d(f, x) > Travel.AHEAD_YD then first = x; break end end end
+        -- (and not one you are already past: Travel.Past, toward the point after it)
+        local function after(j) local y = c.via[j + 1] or n; return y.w end
+        local function ahead(j, x) return x.w and f.w and d(f, x) > Travel.AHEAD_YD and not Travel.Past(f.w, x.w, after(j)) end
+        local fi
+        for j, x in ipairs(c.via) do if (x.kind == "cross" or x.gate) and ahead(j, x) then first, fi = x, j; break end end
+        if not first then for j, x in ipairs(c.via) do if ahead(j, x) then first, fi = x, j; break end end end
         -- the zones the ride passes through (a border crossing joins two: the ones neither where you start nor where you
         -- go), and a gate by its name - not every border spelled out
         local via, seenZ = {}, {}
@@ -753,7 +768,8 @@ local function planTrip(from, to, opts, G)
         local say, warn = text, nil
         if #passes > 0 then warn = "passes " .. table.concat(passes, ", ") .. " (the other faction: guards will attack)"; text = text .. " - " .. warn end
         -- (em, ex, ey: where the ride ends - the arrow carries on there once past the crossing it points at)
-        legs[#legs + 1] = { sm = f.m, sx = f.x, sy = f.y, how = "ride", m = tm, x = tx, y = ty, em = n.m, ex = n.x, ey = n.y, text = text, say = say, warn = warn, hostile = #passes > 0 or nil, toId = n.id, npc = npc, zone = fm and fm:match(", (.+)$") or nil }
+        -- (nw: the point after that crossing on the way, in world coords - past the crossing toward it, it is passed: Arrow)
+        legs[#legs + 1] = { sm = f.m, sx = f.x, sy = f.y, how = "ride", m = tm, x = tx, y = ty, em = n.m, ex = n.x, ey = n.y, nw = first and after(fi) or nil, text = text, say = say, warn = warn, hostile = #passes > 0 or nil, toId = n.id, npc = npc, zone = fm and fm:match(", (.+)$") or nil }
       end
     elseif c.how == "hearth" then
       -- nothing to point at: use the hearthstone (sm/sx/sy: where you land, for the flight-path note)

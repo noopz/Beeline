@@ -63,6 +63,7 @@ Stitch.lua
 Learn.lua
 Availability.lua
 ItemQuests.lua
+QuestItems.lua
 Next.lua
 Timings.lua
 UI\Style.lua

@@ -151,13 +151,14 @@ function List.Rows() return rows end -- for tests
 local INSET = { h = 2, s = 14 + 12 + 7 } -- (where the text starts in a row: a header at its left, a step after its icon)
 local textW, lineH, heights = nil, {}, { h = {}, s = {} }
 local function setWidth(w)
-  if w == textW then return end
+  if w == textW or w < 100 then return end -- (no width yet: the game lays the window out after the first draw)
   textW = w
   for kind, m in pairs(f.measure) do
     m:SetWidth(w - INSET[kind]); m:SetText("Ag"); lineH[kind] = m:GetStringHeight() or 12
     wipe(heights[kind])
   end
 end
+function List.ForgetMeasure() textW = nil end -- (tests: measure again as on a first draw)
 function List.TextHeight(text, kind)
   local h = heights[kind][text]
   if h then return h end
@@ -283,7 +284,11 @@ local function fill(data)
   return count, used
 end
 function List.DrawRows(data)
-  if not textW then setWidth(math.floor((f:GetWidth() or 0) - 12 + 0.5)) end
+  -- the rows' text width, each draw (a compare unless it changed). The game lays the window out after its first draw,
+  -- so the panel can have no width yet: then the panel's own size (Window.INNER). Measured once at 0 wide, every text
+  -- read as one line and the rows cut long steps with "..." in the game (the simulator lays out at once)
+  local pw = f:GetWidth() or 0
+  setWidth(math.floor((pw > 100 and pw or ns.Window.INNER) - 12 + 0.5))
   local cur = ns.Engine.Shown()
   local n = #entries
   local count, used = fill(data)

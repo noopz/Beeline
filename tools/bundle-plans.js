@@ -35,6 +35,9 @@ const VISITS_BLOCK = /\nBeelineVisits = \{\n[\s\S]*?\n\}(?=\n)/g;
 const blocksOf = (src) => [...[...src.matchAll(ZR_BLOCK)].map((m) => [m[0], m[1]]), ...[...src.matchAll(VISITS_BLOCK)].map((m) => [m[0], 'visits'])];
 const packBlocks = (src, shared) => src.replace(ZR_BLOCK, (m, id) => (shared[id] === m ? marker(id) : m)).replace(VISITS_BLOCK, (m) => (shared.visits === m ? marker('visits') : m));
 const marker = (id) => `\n--@zr ${id}@`;
+// a block without the per-class timing fields (a step's dt, dd, qt; s in its g = { ... }): what makes it the same route
+const TIMING = /, (?:s|dt|dd|qt) = -?[0-9.]+(?=[ ,}])/g;
+const untimed = (text) => text.replace(TIMING, '');
 const unpack = (src, shared) => src.replace(/\n--@zr ([^@\n]+)@/g, (m, id) => (id in shared ? shared[id] : m));
 // Steps (the design for zones and chains, 3.4 part 1): a faction's plans walk the same trunk, so most of their step
 // lines are word for word the same - 25 MB of main-path steps per faction held 1.4 MB of distinct lines. Each distinct
@@ -110,14 +113,19 @@ for (const [side, plans] of Object.entries(sides)) {
     '## Group: Beeline',
     '## LoadOnDemand: 1',
     '## Version: ' + (stamps[0] ? stamps[0].split(' · ')[0] : 'plans'),
+    // (when this build was made: the addon's /bee report keeps only the errors seen since - UI/Report.lua BuiltAt)
+    '## X-Built: ' + (+process.env.FR_BUILT || Math.floor(Date.now() / 1000)),
     '', 'Plans.lua', ''].join('\n'));
   // the zone routes every plan here has word for word: kept once
   const seen = {}, shared = {};
   for (const p of plans) for (const [text, id] of blocksOf(p.src)) (seen[id] = seen[id] || new Map()).set(text, ((seen[id].get(text)) || 0) + 1);
   for (const [id, texts] of Object.entries(seen)) { const [text, n] = [...texts.entries()].sort((a, b) => b[1] - a[1])[0]; if (n > 1) shared[id] = text; }
-  // a zone route that differs between plans of one faction is kept in each of them: say so (something class-dependent
-  // got into it, and the file grows by a copy per plan)
-  const split = Object.entries(seen).filter(([, texts]) => texts.size > 1).map(([id, texts]) => id + ' (' + texts.size + ' versions)');
+  // a zone route that differs between plans of one faction is kept in each of them: say so when its steps differ
+  // (something class-dependent got into it, and the file grows by a copy per plan). Only the per-class timings told
+  // apart (TIMING: a step's dt, dd, qt and its g's s, from each plan's own clock) is how a tree's plans are: not said.
+  // (Those copies stay whole: sharing them would lose each class's timings, and their step lines already go through
+  // the shared step lines below.) A dungeon route may differ by design (a class quest for it, above).
+  const split = Object.entries(seen).filter(([id, texts]) => id.startsWith('zone:') && new Set([...texts.keys()].map(untimed)).size > 1).map(([id, texts]) => id + ' (' + new Set([...texts.keys()].map(untimed)).size + ' versions)');
   if (split.length) console.error(`${side}: zone route(s) not the same in every plan: ${split.slice(0, 8).join(', ')}${split.length > 8 ? ' ...' : ''}`);
   for (const p of plans) {
     p.packed = packBlocks(p.src, shared);

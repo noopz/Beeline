@@ -245,6 +245,10 @@ local function build()
       -- (near the end only: far off, a crossing that looks "behind" can still be the way round the mountains)
       behind = youToEnd < 300 and youToEnd + 5 < wayToEnd
     end
+    -- ...or past it toward the way's next point while still in the old zone: a crossing's point can lie short of where
+    -- the zone changes (Western Plaguelands / Eastern Plaguelands on the Thondroril River), and riding on along the
+    -- road the arrow turned back to it (user: "110 deg off the line's direction")
+    if not behind and target.leg == "ride" and target.nextW and dist <= ns.Travel.PAST_YD and ns.Travel.Past({ px, py, pinst }, { target.wx, target.wy, target.winst }, target.nextW) then behind = true end
     if target.leg == "ride" and (dist <= (target.r or 8) or behind) and not target.passing then
       target.passing = true
       Arrow.passed = { index = target.index, step = target.step, wx = target.wx, wy = target.wy, inst = target.winst }
@@ -435,6 +439,7 @@ function Arrow.Build(i, s)
   local trip = s and ns.Engine.TravelFor and ns.Engine.TravelFor(s)
   aimed = step and s == step and { step = step, key = tripKey(trip) } or nil -- (not on a flight, in a dungeon, a game spot)
   local onward -- (past the ride's crossing: on to where that ride ends)
+  local nextW -- (the point after the ride's crossing, world coords: past the crossing toward it, it is passed)
   if trip and trip.how == "aboard" then m, x, y = nil, nil, nil -- sailing: nothing to point at until you land
   elseif trip then
     local l1 = trip.legs and trip.legs[1]
@@ -466,6 +471,7 @@ function Arrow.Build(i, s)
     if useTrip then
       m, x, y, label = trip.m, trip.x, trip.y, (l1 and l1.text) or trip.text
       leg = how
+      if how == "ride" and l1 and l1.m == trip.m and l1.x == trip.x and l1.y == trip.y then nextW = l1.nw end
     elseif passed and endX and not (endM == s.m and endX == s.x and endY == s.y) then
       -- past the crossing of a ride that does not end at the step (a "fly" step's ride into the zone, the ride to a
       -- flight master): on to the ride's end, still the card's leg - not the step's own flight master
@@ -486,6 +492,8 @@ function Arrow.Build(i, s)
     target = { index = i, step = step, m = m, x = x, y = y, r = leg and 8 or patrol and math.max(s.r or 12, 20) or s.r, leg = leg, patrol = patrol or nil, zone = s.zone, wx = wx, wy = wy, winst = winst, label = label or ns.Card.Plain((ns.Card.Describe(s))) }
     target.path = (not label) and buildPath(s, m, wx, wy) or nil
     if leg == "ride" and endM and endX then local a, b, c = HBD:GetWorldCoordinatesFromZone(endX, endY, endM); if a then target.endW = { a, b, c } end end
+    -- (the point after the ride's crossing: Travel.Plan's nw, for the leg the arrow points along)
+    if leg == "ride" and not onward and nextW then target.nextW = nextW end
     target.passing = onward -- (the ride's end itself: no crossing left to pass)
     -- the live line (Nav.lua) is for exactly this target: the step itself (with its planned floor height) or a waypoint
     target.key = wx and (i .. ":" .. math.floor(wx) .. ":" .. math.floor(wy)) or nil

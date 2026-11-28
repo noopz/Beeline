@@ -237,10 +237,34 @@ ns.On("QUEST_ACCEPTED", function(a, b) Avail.Taken(type(b) == "number" and b or 
 -- a quest the giver can't offer yet for a reason we know: a quest before it not handed in (the window you open to hand
 -- that one in lists none of what follows - Commander Truesong's four after Slay the Spitelash's hand-in, all four
 -- "not offered" and then "offered after all"), or a reputation you don't have. Not judged: no "not offered" for it
+-- the breadcrumbs that lead to each quest (ns.BREADCRUMBS turned around: breadcrumb -> its targets), built once per
+-- table
+local crumbsOf, crumbsFrom = {}, nil
+local function crumbsTo(q)
+  local B = ns.BREADCRUMBS
+  if crumbsFrom ~= B then
+    crumbsOf, crumbsFrom = {}, B
+    for b, ts in pairs(B or {}) do
+      for _, t in ipairs(ts) do local l = crumbsOf[t]; if not l then l = {}; crumbsOf[t] = l end; l[#l + 1] = b end
+    end
+  end
+  return crumbsOf[q]
+end
+-- a breadcrumb leading to q is in your log (taken, not handed in): its giver doesn't list q until you hand that in
+function Avail.CrumbInLog(q)
+  local l = q and crumbsTo(q)
+  if not (l and ns.State and ns.State.OnQuest) then return false end
+  for _, b in ipairs(l) do if ns.State.OnQuest(b) and not ns.State.IsCompleted(b) then return true end end
+  return false
+end
+-- (or its breadcrumb is in your log: the giver lists the quest it leads to only once that one is handed in - Enraged
+-- Wildkin at Jaron Stoneshaper, Threat of the Winterfall at Donova Snowden, "not offered" and "offered after all" a
+-- moment later, the step off the route and a chat line meanwhile)
 function Avail.Waits(q)
   for _, p in ipairs((ns.Engine and ns.Engine.PrereqsOf and ns.Engine.PrereqsOf(q)) or {}) do
     if not (ns.State and ns.State.IsCompleted(p)) then return true end
   end
+  if Avail.CrumbInLog(q) then return true end
   return Avail.Needs(q) ~= nil
 end
 -- the route is refreshed only when the offers changed what is on it

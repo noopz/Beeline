@@ -300,7 +300,17 @@ local function whereNow()
   if x then return { x, y, inst } end
   return p and { p[1], p[2], p[3] } or nil
 end
+-- are steps a and b one stop: objectives of one quest placed at one spot (b's place within a's radius)?
+function Engine.SameStop(a, b)
+  local list = steps()
+  local s, t = list[a], list[b]
+  if not (s and t) or s.k ~= "obj" or t.k ~= "obj" or s.unknown or t.unknown or not s.q or s.q ~= t.q then return false end
+  local w = wpos(t)
+  local d = w and distTo(s, w[1], w[2], w[3])
+  return d ~= nil and d <= (s.r or 40)
+end
 -- kills / loot counting for a later objective: that's what you're doing (FR_PROGRESS: only a count moved)
+local staySaid -- (the card stayed on a near kill step for a far one's count: said once a pair)
 local function countsMoved()
   local planned = Engine.planned or Engine.current
   if not planned or Engine.view then return end
@@ -311,6 +321,7 @@ local function countsMoved()
   -- (and the card's step when the solve picked another: otherwise farming it set no hold and the card could leave)
   local cur = Engine.current
   if cur and cur ~= planned then local seen = false; for _, j in ipairs(js) do if j == cur then seen = true end end; if not seen then js[#js + 1] = cur end end
+  local moved, where = {}, nil
   for _, j in ipairs(js) do
     local s = list[j]
     if s and s.k == "obj" and not Engine.IsDone(j) then
@@ -318,17 +329,43 @@ local function countsMoved()
       local k = key(j)
       if o and o.have then
         if lastHave[k] and o.have > lastHave[k] and not o.finished then
+          where = where or whereNow()
           progressAt[k] = GetTime()
-          progressWhere[k] = whereNow()
-          if j == planned then
-            if (Engine.focus and Engine.focus ~= planned) or Engine.current ~= planned then Engine.focus, Engine.focusWhy = nil, nil; Engine.Refresh() end
-          elseif Engine.focus == j then Engine.focusWhy = "progress" -- shown for being here, now also counting: hold it as such
-          else setFocus(j, "you are making progress on it", "progress") end -- (the card's own pick too: held while you farm it)
+          progressWhere[k] = where
+          moved[#moved + 1] = j
         end
         lastHave[k] = o.have
       end
     end
   end
+  if #moved == 0 then return end
+  -- which one the card takes: the step nearest to where the count moved. A quest's objectives are often placed at
+  -- different camps (Threat of the Winterfall: Pathfinders and Totemics at the camp by Donova, Den Watchers at the
+  -- village across the zone) though their mobs share a camp: a Den Watcher killed by Donova took the card to the
+  -- village, a trip via Moonglade from where you stood (3.3.0, gnome warlock 55). Hence too: a count for a step whose
+  -- place is far from you does not take the card off the kill step it holds here, nearer
+  local function yd(j) local d = where and distTo(list[j], where[1], where[2], where[3]); return d or math.huge end
+  local j, dj = nil, math.huge
+  for _, m in ipairs(moved) do local d = yd(m); if not j or d < dj then j, dj = m, d end end -- (ties: the earlier step)
+  local held = Engine.focus or Engine.current
+  local cs = held and held ~= j and list[held]
+  -- one quest's objectives placed at one spot are one stop: the card shows them all ("Do these here", Engine.Group)
+  -- and stays on the step it holds as your kills alternate between them (Deadwood of the North: Avengers, Den
+  -- Watchers and Shamans at one camp flipped the card at every other kill, 3.3.0). The count holds that step
+  if cs and Engine.Status(held) == "todo" and Engine.SameStop(held, j) then
+    local k = key(held)
+    progressAt[k], progressWhere[k] = GetTime(), where
+    j = held; cs = nil
+  end
+  if cs and cs.k == "obj" and Engine.Status(held) == "todo" and dj > (list[j].r or 40) + 80 and yd(held) < dj then
+    local said = held .. ">" .. j
+    if ns.Why and staySaid ~= said then staySaid = said; ns.Why("reorder", "stays on step " .. held .. " (" .. (cs.name or cs.text or cs.k) .. "): a count for step " .. j .. " moved here, far from its place") end
+    return
+  end
+  if j == planned then
+    if (Engine.focus and Engine.focus ~= planned) or Engine.current ~= planned then Engine.focus, Engine.focusWhy = nil, nil; Engine.Refresh() end
+  elseif Engine.focus == j then Engine.focusWhy = "progress" -- shown for being here, now also counting: hold it as such
+  else setFocus(j, "you are making progress on it", "progress") end -- (the card's own pick too: held while you farm it)
 end
 ns.On("FR_STATE", countsMoved)
 ns.On("FR_PROGRESS", countsMoved)

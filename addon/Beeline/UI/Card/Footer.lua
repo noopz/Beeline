@@ -35,7 +35,7 @@ function Card.BuildFooter(frame)
     fwd = Style.IconButton(f.ctl, "btn-next", 20, function() ns.Engine.Forward() end, "Next step"),
     done = Style.IconButton(f.ctl, "icon-check", 20, function() ns.Engine.MarkDone() end, "Mark this step done"),
     skip = Style.IconButton(f.ctl, "btn-skip", 20, function() ns.Engine.Skip() end, "Skip this step (a skipped quest's later steps go too)"),
-    min = Style.IconButton(f.ctl, "btn-min", 20, function() ns.db.collapsed = not ns.db.collapsed; Card.Update() end, "Collapse / expand"),
+    min = Style.IconButton(f.ctl, "btn-min", 20, function() ns.db.collapsed = not ns.db.collapsed; if ns.Rail then ns.Rail.Manual() end; Card.Update() end, "Collapse / expand"),
     -- "this looks wrong": the moment kept for a bug report (Moments.lua), the flag turning green a moment to say so
     flag = Style.IconButton(f.ctl, "btn-flag", 20, function(self) Card.FlagMoment(self) end, Card.FLAG_TIP),
   }

@@ -455,7 +455,9 @@ function Card.Fill()
   -- (a trip: not the far step's zone and coordinates - the detail says where it ends)
   do local sc = section(i); if s.zone and not headTrip and not (sc and sc.zone == s.zone) then bits[#bits + 1] = Style.ShortZone(s.zone) end end
   -- (an unknown step's spot is only its place in the order: no coordinates, no map button)
-  if s.x and s.y and not s.unknown and not headTrip then bits[#bits + 1] = string.format("|cff8e99ad%.0f, %.0f|r", s.x * 100, s.y * 100) end
+  -- ("67, 24" never breaks inside: a no-break space - the game wraps at spaces, and since Later widened the tool row a
+  -- pick-up's "from Yorba Screwspigot  ·  67, 24" broke before the 24)
+  if s.x and s.y and not s.unknown and not headTrip then bits[#bits + 1] = string.format("|cff8e99ad%.0f,\194\160%.0f|r", s.x * 100, s.y * 100) end
   -- the walking path knows the floor heights: say when the stop is upstairs (a tower top) or below (a cellar, a cave)
   -- (only indoors - outdoors a height difference is a hill, the same rule as the arrow)
   if s.z and s.z0 and math.abs(s.z - s.z0) >= 6 and ns.Arrow and ns.Arrow.Indoors and ns.Arrow.Indoors() then

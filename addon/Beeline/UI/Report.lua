@@ -14,8 +14,10 @@ Report.FORMAT = 1
 -- sections: tag byte, then a varint byte length, then the body - a decoder skips tags it doesn't know
 -- (7: errors without version or time - an old report's; 10 and 11 replace it)
 -- (12: a saved moment's tag - Moments.lua: why it was kept, noticed by itself or flagged by you, how many times;
--- 13: the saved moments not sent yet, each a whole report of its own, with a count of those left out for size)
-local T = { meta = 1, log = 2, completed = 3, taxi = 4, ticks = 5, why = 6, errors = 11, card = 8, settings = 9, where = 10, moment = 12, moments = 13 }
+-- 13: the saved moments not sent yet, each a whole report of its own, with a count of those left out for size;
+-- 14: quest items - QuestItems.lua: the starting items in your bags, the items the shown step, the next few and the
+-- shown quest's chain ask for, as bags / bank (remembered: when it was seen) / worn, and the chain's quests done or in your log)
+local T = { meta = 1, log = 2, completed = 3, taxi = 4, ticks = 5, why = 6, errors = 11, card = 8, settings = 9, where = 10, moment = 12, moments = 13, items = 14 }
 -- why a step before the card's was passed over
 local REASON = { done = 1, todo = 2, blocked = 3, wait = 4, notready = 5, later = 6, skip = 7, tick = 8, nope = 9,
   outlevel = 10, gray = 11, crumb = 12, behind = 13, unavail = 14 }
@@ -68,6 +70,38 @@ local function reasonOf(i, s)
   return REASON[E.Status(i)] or 0
 end
 
+-- When the build you run was made: tools/bundle-plans.js stamps the plan addons it writes ("## X-Built", unix time) at
+-- every install and package. The table of contents is read by the game even for an addon not loaded yet. nil: unknown
+Report.PLAN_ADDONS = { "Beeline_Plans_Alliance", "Beeline_Plans_Horde" }
+function Report.BuiltAt()
+  local get = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+  if not get then return nil end
+  local best
+  for _, a in ipairs(Report.PLAN_ADDONS) do
+    local ok, v = pcall(get, a, "X-Built")
+    v = ok and tonumber(v)
+    if v and v > 0 and (not best or v > best) then best = v end
+  end
+  return best
+end
+
+-- the errors a report carries: seen in the last week, newest first, at most 3 (the log keeps every error ever,
+-- deduplicated). Only the build you run: an old install's errors are noise, and one rode along in every report. A dev
+-- install is always version "dev", so the build is told by when its plans were bundled (Report.BuiltAt): an error not
+-- seen since is dropped. Without that, as before: the version you run, or seen in the last day.
+function Report.Errors(log, now, built)
+  if built == nil then built = Report.BuiltAt() end
+  local out = {}
+  for _, e in ipairs(log) do
+    local seen = e.last or e.first or 0
+    local age = now - seen
+    if age < 7 * 86400 and (built and seen >= built or not built and (e.version == ns.VERSION or age < 86400)) then out[#out + 1] = e end
+  end
+  table.sort(out, function(a, b) return (a.last or a.first or 0) > (b.last or b.first or 0) end)
+  while #out > 3 do table.remove(out) end
+  return out
+end
+
 -- the report's data, gathered fresh (a table: Report.Pack turns it into text; the tests check both halves)
 function Report.Gather(full)
   -- a fresh read, without replacing the snapshot the companion plans from (where the game gives no coordinates that
@@ -111,16 +145,7 @@ function Report.Gather(full)
   local why = (BeelineDB and BeelineDB.why) or {}
   d.why = {}
   for i = math.max(1, #why - (full and 30 or 12) + 1), #why do local w = why[i]; if w then d.why[#d.why + 1] = w end end
-  -- errors seen in the last week, newest first (the log keeps every error ever, deduplicated)
-  d.errors = {}
-  local log, now = (BeelineDB and BeelineDB.log) or {}, time()
-  -- (from the version you run, or seen in the last day: an old install's errors are noise)
-  for _, e in ipairs(log) do
-    local age = now - (e.last or e.first or 0)
-    if age < 7 * 86400 and (e.version == ns.VERSION or age < 86400) then d.errors[#d.errors + 1] = e end
-  end
-  table.sort(d.errors, function(a, b) return (a.last or a.first or 0) > (b.last or b.first or 0) end)
-  while #d.errors > 3 do table.remove(d.errors) end
+  d.errors = Report.Errors((BeelineDB and BeelineDB.log) or {}, time())
   -- where you are when the game gives no coordinates (on a flight, indoors in some places, loading): the map it does
   -- give, and why
   local best = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
@@ -171,7 +196,8 @@ function Report.Pack(d)
   for _, c in ipairs(d.card) do varint(b, c.i); byte(b, c.r); byte(b, KIND[c.k] or 0); varint(b, c.q) end
   section(out, T.card, b)
   b = buf(); varint(b, #d.why)
-  for _, w in ipairs(d.why) do varint(b, w.t); str(b, w.k, 12); varint(b, w.lv); varint(b, w.m); str(b, w.x, d.full and 160 or 100) end
+  -- (a line seen more than once ends "(xN)": Why.lua counts repeats on the line instead of logging them again)
+  for _, w in ipairs(d.why) do local max = d.full and 160 or 100; varint(b, w.t); str(b, w.k, 12); varint(b, w.lv); varint(b, w.m); str(b, ns.WhyText and ns.WhyText(w, max) or w.x, max) end
   section(out, T.why, b)
   b = buf(); varint(b, #d.errors)
   for _, e in ipairs(d.errors) do str(b, e.where, 20); varint(b, e.count); str(b, e.msg, 160); str(b, e.shown, 80); str(b, e.version, 12); varint(b, e.last or e.first) end
@@ -191,6 +217,15 @@ function Report.Pack(d)
   if d.moment then
     b = buf(); str(b, d.moment.tag, 20); str(b, d.moment.why, 120); byte(b, d.moment.auto and 1 or 0)
     section(out, T.moment, b)
+  end
+  if d.items then
+    -- (no names: tools/report.js names items and quests from the quest data)
+    local it = d.items
+    b = buf(); varint(b, it.bankT or 0)
+    varint(b, #it.starts); for _, x in ipairs(it.starts) do varint(b, x.item); varint(b, x.q) end
+    varint(b, #it.need); for _, x in ipairs(it.need) do varint(b, x.item); varint(b, x.bags); varint(b, x.bank); varint(b, x.worn); byte(b, x.why) end
+    varint(b, #it.chain); for _, x in ipairs(it.chain) do varint(b, x.q); byte(b, x.role * 4 + x.st) end
+    section(out, T.items, b)
   end
   if d.moments and #d.moments > 0 then
     b = buf(); varint(b, #d.moments); varint(b, d.momentsLeft or 0)
@@ -259,6 +294,12 @@ function unpackBytes(bytes)
         local times, len = rv(), rv(); local sub = {}; for i = 1, len do sub[i] = rb() end
         d.moments[k] = unpackBytes(sub); if d.moments[k].moment then d.moments[k].moment.n = times end
       end
+    elseif tag == T.items then
+      local it = { bankT = rv(), starts = {}, need = {}, chain = {} }
+      for k = 1, rv() do it.starts[k] = { item = rv(), q = rv() } end
+      for k = 1, rv() do it.need[k] = { item = rv(), bags = rv(), bank = rv(), worn = rv(), why = rb() } end
+      for k = 1, rv() do local q, x = rv(), rb(); it.chain[k] = { q = q, role = math.floor(x / 4), st = x % 4 } end
+      d.items = it
     elseif tag == T.why then
       d.why = {}; for k = 1, rv() do d.why[k] = { t = rv(), k = rs(), lv = rv(), m = rv(), x = rs() } end
     end
@@ -300,6 +341,8 @@ function Report.Text(full)
   local list, left = {}, 0
   local ok, text = pcall(function()
     local d = Report.Gather(full)
+    -- (the quest items: in the report you send, not in each saved moment - Moments.lua gathers its own)
+    if ns.QuestItems then d.items = ns.QuestItems.Gather(d.meta.current ~= 0 and d.meta.current or nil) end
     if ns.Moments then
       list, left = ns.Moments.ForCopy(full and 4000 or 2000)
       d.moments, d.momentsLeft = {}, left

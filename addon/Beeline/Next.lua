@@ -886,9 +886,10 @@ function Next.TownPickupNeeded(i, j, planned)
     and ns.Travel.SegDist(tw[1], tw[2], { px, py, pinst }, sw) <= Next.PF_WALK_YD then
     return true, "its giver is on your way out"
   end
-  -- (a pick-up taken later needs a log slot then: with one left, the plan's next pick-up takes it first)
+  -- (a pick-up taken later needs a log slot then: with one left, the plan's next pick-up takes it first - unless the
+  -- card's step is a hand-in, which frees a slot on the way: mutate sweep, Redridge at 39/40, Missing In Action)
   local St = ns.State
-  if St.LogCount and St.MaxLog and St.LogCount() >= St.MaxLog() - 1 then return true, "one log slot left: it is this pick-up's now" end
+  if s.k ~= "turnin" and St.LogCount and St.MaxLog and St.LogCount() >= St.MaxLog() - 1 then return true, "one log slot left: it is this pick-up's now" end
   local from = planned or E.planned or i
   for k = from, math.min(#list, from + 60) do
     local u = list[k]

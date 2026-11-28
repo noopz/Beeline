@@ -1086,7 +1086,7 @@ local function computeLater(r, L)
       -- (started by an item, its earlier quests in: it waits for that item in your bags, its follow-ups with it - where
       -- the item comes from, nothing says: the Oathstone isn't 3373's reward, and no drop of it is known)
       if not at and s.item and State.PrereqsMet(q) and not haveItem(s.item) then at, why = L, "item" end
-      if at then out[q] = { q = q, name = s.name, level = ql, minLevel = ml, at = at, why = why, red = red, step = i, root = q, itemName = why == "item" and (s.itemName or ("item " .. s.item)) or nil } end
+      if at then out[q] = { q = q, name = s.name, level = ql, minLevel = ml, at = at, why = why, red = red, step = i, root = q, item = why == "item" and s.item or nil, itemName = why == "item" and (s.itemName or ("item " .. s.item)) or nil } end
     end
   end
   if next(out) == nil then return out end
@@ -1853,13 +1853,14 @@ function Engine.Compute()
     end
     return false
   end
+  local function leftForTrip(i) return list[i].added and list[i].k == "fp" and not ridesAlong(i) end
   for i = start, #list do
     local st = look(i)
     if st ~= "done" and extra(i) then st = "extra" end
     if st == "extra" then sawExtra = true
     elseif st ~= "done" then
       if waits(st) then passedOver(i, st)
-      elseif list[i].added and list[i].k == "fp" and not ridesAlong(i) then -- (left for its trip: see above)
+      elseif leftForTrip(i) then -- (left for its trip: see above)
       else found = i; break end
     elseif runLen == i - 1 then runLen = i end
   end
@@ -1876,7 +1877,12 @@ function Engine.Compute()
       local st = look(i)
       if st ~= "done" and not extra(i) then
         if st == "todo" and below(i) then -- (passed below the floor)
-        elseif st == "wait" or st == "full" or st == "blocked" or st == "later" then passedOver(i, st) else f2 = i; break end
+        elseif st == "wait" or st == "full" or st == "blocked" or st == "later" then passedOver(i, st)
+        -- (nor a flight path added close to a trip whose steps all wait: left for its trip here too. Above the floor it
+        -- became the card from another continent - Bluebell in Mount Hyjal, for a hunter 53 in the Western Plaguelands
+        -- whose Hyjal steps wait for 54)
+        elseif leftForTrip(i) then
+        else f2 = i; break end
       end
     end
     -- (nothing left to do above the floor: the quests you hold below it are the plan's work now, not a finished
@@ -2033,14 +2039,18 @@ function Engine.ZonesAhead(i, n)
   return out
 end
 
--- objective steps done in the same spot right after this one: shown together on the card
+-- objective steps done in the same spot right before and after this one: shown together on the card (the ones
+-- before too: your kills can hold the card on a later one of them, Engine.SameStop)
 function Engine.Group(i)
   local list, out = steps(), {}
   local s = list[i]
   if not s or s.k ~= "obj" or s.unknown then return out end -- (work with no known place is not "here")
+  local function here(t) return t.k == "obj" and not t.unknown and t.m == s.m and math.abs((t.x or 0) - (s.x or 0)) <= 0.02 and math.abs((t.y or 0) - (s.y or 0)) <= 0.02 end
+  local a = i
+  while a > 1 and a > i - 8 and here(list[a - 1]) do a = a - 1 end
+  for j = a, i - 1 do if not Engine.IsDone(j) then out[#out + 1] = j end end
   for j = i + 1, math.min(#list, i + 8) do
-    local t = list[j]
-    if t.k ~= "obj" or t.unknown or t.m ~= s.m or math.abs((t.x or 0) - (s.x or 0)) > 0.02 or math.abs((t.y or 0) - (s.y or 0)) > 0.02 then break end
+    if not here(list[j]) then break end
     if not Engine.IsDone(j) then out[#out + 1] = j end
   end
   return out

@@ -4,7 +4,8 @@
 -- names it, says what it opens and gives its count. The rail is quiet: flat glyphs in a dim colour on a faint tint (no
 -- discs, no edge line), brighter under the mouse, gold while their view is on screen; a count is a small number under its
 -- glyph, in the rail's own column; Back to plan alone is gold with a wash. A tab on the card's left edge, beside the rail, hides and shows it
--- (ns.db.rail, shown by default); a collapsed card has neither. The counts are worked out when the card is laid out
+-- (ns.db.rail, shown by default); a collapsed card has no rail but keeps the tab, which opens the whole card with the rail
+-- (and closing the rail with it folds the card back: Rail.Toggle). The counts are worked out when the card is laid out
 -- (Card.Layout: the events that already redraw it), never per frame: the side trips' from Dungeons.Counts (kept until
 -- your quests, level or routes change), the log check's from LogCheck.dropCount. Tooltips are worked out on hover.
 local _, ns = ...
@@ -138,14 +139,29 @@ function Rail.Build(frame)
 end
 
 function Rail.TabTip()
-  if ns.db.rail ~= false then return { "Hide the side rail", "Route, Where to?, Side trips, Log check and Options fold away. This tab brings them back." } end
+  if Rail.On() then return { "Hide the side rail", "Route, Where to?, Side trips, Log check and Options fold away. This tab brings them back." } end
   return { "Show the side rail", "Route, Where to?, Side trips, Log check and Options, on the card's left." }
 end
--- the tab's click: the rail shown or hidden, kept for next time
+-- the tab's click: the rail shown or hidden, kept for next time. On a collapsed card: the card expanded with the rail
+-- shown - and closing the rail with the tab then collapses it again, the rail as you had it (Rail.opened: the rail's
+-- setting before; the collapse button clears it, Rail.Manual - expanded by hand, the card stays so)
 function Rail.Toggle()
-  ns.db.rail = ns.db.rail == false
+  local was = ns.db.collapsed
+  if ns.db.collapsed then
+    Rail.opened = { rail = ns.db.rail }
+    ns.db.collapsed = false; ns.db.rail = true
+  elseif Rail.opened and ns.db.rail ~= false then
+    ns.db.collapsed = true; ns.db.rail = Rail.opened.rail
+    Rail.opened = nil
+  else
+    ns.db.rail = ns.db.rail == false
+  end
+  -- (the card collapsed or expanded: redrawn as its own button does; the layout always - a redraw can skip it)
+  if was ~= ns.db.collapsed and Card.Update then Card.Update() end
   if Card.Layout then Card.Layout() end
 end
+-- the card collapsed or expanded with its own button: no fold back with the tab
+function Rail.Manual() Rail.opened = nil end
 
 -- the buttons lit for the window's view on screen (the window calls it when it opens, closes or changes view)
 function Rail.Lit()
@@ -171,8 +187,8 @@ function Rail.Update()
   if not rail then return end
   local on = Rail.On()
   rail:SetShown(on)
-  tab:SetShown(not ns.db.collapsed)
-  tab.label:SetText(ns.db.rail ~= false and "<" or ">")
+  tab:Show() -- (a collapsed card too: it opens the card with the rail)
+  tab.label:SetText(on and "<" or ">")
   if not on then return end
   counts, total = NONE, 0
   if ns.Dungeons and ns.Dungeons.Counts then counts, total = ns.Dungeons.Counts() end
